@@ -769,3 +769,17 @@ a.howto { text-decoration: none; color: var(--ink); }
   .status-btn { padding: 6px 6px 6px 9px; font-size: 13px; }
 }
 @media (max-width: 370px) { .brand { display: none; } }
+
+/* ============ Skafferiet i inställningarna (kompakt) ============ */
+.pantry-h { font-family: var(--font-body); font-size: 14.5px; font-weight: 700; margin: 12px 0 6px; }
+.chips.compact { gap: 5px; }
+.chips.compact .chip { padding: 5px 11px; font-size: 14px; font-weight: 600; }
+.chip.rm::after { content: "×"; color: var(--muted); font-weight: 700; margin-left: 2px; }
+.chip.rm:hover { border-color: var(--sambal); }
+.chip.add::before { content: "+"; color: var(--pandan); font-weight: 800; }
+.chip.more { border-style: dashed; color: var(--muted); }
+.pantry-tip { font-size: 13px; margin: 6px 0 4px; }
+.pantry-sugg { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 6px; }
+.pantry-sugg-head, .pantry-g { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pantry-g h3 { margin: 0 0 6px; }
+.linkish { border: 0; background: none; color: var(--pandan); font-weight: 700; font-size: 13.5px; padding: 2px 0; cursor: pointer; }

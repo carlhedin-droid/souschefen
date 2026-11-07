@@ -1706,15 +1706,24 @@ function prefsSections() {
       ${groups(OPT.equipment, v => chip('equipment', v))}
       ${P.customEquipment.length ? `<div class="chips">${P.customEquipment.map(v => `<button type="button" class="chip opt" data-premove="${esc(v)}" aria-pressed="true" title="${L('Tryck för att ta bort', 'Tap to remove')}">${esc(v)} ×</button>`).join('')}</div>` : ''}
       <div class="add-row"><input id="equipNew" placeholder="${L('Lägg till egen, t.ex. Plancha', 'Add your own, e.g. Plancha')}" aria-label="${L('Egen utrustning', 'Your own equipment')}"><button class="ghost" data-equipadd>${L('Lägg till', 'Add')}</button></div>`),
-    sec('pantry', L('Skafferiet', 'Pantry'), `
-      <p class="hint ss-lead">${L('Basvaror ni alltid har hemma utöver självklarheterna (salt, socker, mjöl, matolja, smör, lök m.m.), t.ex. kokosmjölk och sesamolja. Souschefen använder dem fritt, och när ni handlar till mataffären hamnar de under "Har ni troligen hemma".', 'Staples you always have beyond the obvious (salt, sugar, flour, oil, butter, onion etc.), e.g. coconut milk and sesame oil. The sous-chef uses them freely, and when you shop for the grocery store they go under "You probably have".')}</p>
-      <div class="chips">${pantryOf(P).map(v => `<button type="button" class="chip opt" data-pantryrm="${esc(v)}" aria-pressed="true" title="${L('Tryck för att ta bort', 'Tap to remove')}">${esc(v)} ×</button>`).join('')}</div>
+    sec('pantry', L('Skafferiet', 'Pantry'), (() => {
+      const have = pantryOf(P), MAX = 12, shown = S.pantryAll ? have : have.slice(0, MAX);
+      const sugg = (S.pantrySugg || []).map((g, gi) => ({ ...g, gi, items: g.items.filter(v => !have.some(x => fold(x) === fold(v))) })).filter(g => g.items.length);
+      return `
+      <p class="hint ss-lead">${L('Det ni <b>alltid har hemma</b> utöver salt, socker och annat självklart. Souschefen räknar med det i recepten, och det hamnar inte bland "Att handla" i inköpslistan.', 'What you <b>always have at home</b> beyond salt, sugar and other obvious things. The sous-chef counts on it in recipes, and it is not put under "To buy" in the shopping list.')}</p>
+      <h3 class="pantry-h">${L('Ni har', 'You have')} (${have.length})</h3>
+      ${have.length ? `<div class="chips compact">${shown.map(v => `<button type="button" class="chip rm" data-pantryrm="${esc(v)}" aria-label="${L(`Ta bort ${esc(v)}`, `Remove ${esc(v)}`)}">${esc(v)}</button>`).join('')}${have.length > MAX ? `<button type="button" class="chip more" data-pantrymore>${S.pantryAll ? L('Visa färre', 'Show fewer') : L(`+${have.length - MAX} till`, `+${have.length - MAX} more`)}</button>` : ''}</div>
+        <p class="hint pantry-tip">${L('Tryck på en vara för att ta bort den.', 'Tap an item to remove it.')}</p>` : `<p class="muted pantry-tip">${L('Inget än. Skriv nedan eller låt souschefen föreslå.', 'Nothing yet. Type below or let the sous-chef suggest.')}</p>`}
       <div class="add-row"><input id="pantryNew" placeholder="${L('Lägg till, t.ex. Fisksås', 'Add, e.g. Fish sauce')}" aria-label="${L('Ny basvara', 'New staple')}"><button class="ghost" data-pantryadd>${L('Lägg till', 'Add')}</button></div>
       <div class="pantry-suggest">
-        <button class="ghost" data-pantrysuggest ${S.pantryBusy ? 'disabled' : ''}>${S.pantryBusy ? L('Tänker…', 'Thinking…') : L('✨ Föreslå utifrån våra favoritländer', '✨ Suggest from our favourite countries')}</button>
+        ${sugg.length ? `<div class="pantry-sugg">
+          <div class="pantry-sugg-head"><h3 class="pantry-h">${L('Förslag – tryck på det ni brukar ha hemma', 'Suggestions – tap what you usually have')}</h3><button type="button" class="ghost small" data-pantryclose>${L('Klar', 'Done')}</button></div>
+          ${sugg.map(g => `<div class="opt-group"><div class="pantry-g"><h3>${esc(g.group)}</h3><button type="button" class="linkish" data-pantryallg="${g.gi}">${L('Lägg till alla', 'Add all')}</button></div>
+            <div class="chips compact">${g.items.map(v => `<button type="button" class="chip add" data-pantrypick="${esc(v)}">${esc(v)}</button>`).join('')}</div></div>`).join('')}
+        </div>` : `<button class="ghost" data-pantrysuggest ${S.pantryBusy ? 'disabled' : ''}>${S.pantryBusy ? L('Tänker…', 'Thinking…') : L('✨ Föreslå utifrån våra favoritländer', '✨ Suggest from our favourite countries')}</button>`}
         ${S.pantryErr ? `<p class="wine-err">${esc(S.pantryErr)}</p>` : ''}
-        ${S.pantrySugg?.length ? `<p class="hint" style="margin:10px 0 6px">${L('Tryck för att lägga till:', 'Tap to add:')}</p>${S.pantrySugg.map(g => `<div class="opt-group"><h3>${esc(g.group)}</h3><div class="chips">${g.items.map(v => `<button type="button" class="chip opt" data-pantrypick="${esc(v)}" aria-pressed="${pantryOf(P).some(x => fold(x) === fold(v))}">${esc(v)}</button>`).join('')}</div></div>`).join('')}` : ''}
-      </div>`),
+      </div>`;
+    })()),
     sec('drinks', L('Dryck', 'Drinks'), `
       <p class="hint ss-lead">${L('Souschefen föreslår vilken typ av dryck som passar till helgens recept, med länkar till Systembolagets sortiment.', 'The sous-chef suggests what kind of drink suits weekend recipes, with links to Systembolaget\'s range.')}</p>
       <div class="field"><label>${L('Pris per flaska (kr)', 'Price per bottle (SEK)')}</label>
@@ -1945,7 +1954,10 @@ $('#stage').addEventListener('click', async e => {
   const shs = t.closest('[data-shopsel]'); if (shs) { S.shop.sel[shs.dataset.shopsel] = shs.checked; keepScroll(renderStage); return; }
   if (t.closest('[data-shopadd]')) { addToShop(); return; }
   const prm = t.closest('[data-pantryrm]'); if (prm) { pantryToggle(prm.dataset.pantryrm, false); return; }
-  const ppk = t.closest('[data-pantrypick]'); if (ppk) { pantryToggle(ppk.dataset.pantrypick); return; }
+  const ppk = t.closest('[data-pantrypick]'); if (ppk) { pantryToggle(ppk.dataset.pantrypick, true); return; }
+  if (t.closest('[data-pantrymore]')) { S.pantryAll = !S.pantryAll; keepScroll(renderStage); return; }
+  if (t.closest('[data-pantryclose]')) { S.pantrySugg = null; keepScroll(renderStage); return; }
+  const pag = t.closest('[data-pantryallg]'); if (pag) { const g = S.pantrySugg?.[+pag.dataset.pantryallg]; if (g) { const P = S.data.prefs; g.items.forEach(x => { if (!isGiven(x) && !pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
   if (t.closest('[data-pantrysuggest]')) { suggestPantry(); return; }
   if (t.closest('[data-pantryadd]')) { const el = $('#pantryNew'); const v = (el?.value || '').trim(); if (v) { v.split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => { const P = S.data.prefs; if (!isGiven(x) && !pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
   if (t.closest('[data-drinks]')) { openChat(true); send(L('Föreslå dryck till receptet: fyll "drinks" enligt Dryckestips (varför, 2–3 alternativ med typ, smakstil, druva och vad man letar efter, prisråd och ett alkoholfritt alternativ – inga specifika flaskor). Ändra INTE ingredienserna eller stegen. Skicka HELA receptet i "recipe".', 'Suggest drinks for the recipe: fill "drinks" (why, 2–3 options with kind, taste, grape and what to look for, a price tip and an alcohol-free option – no specific bottles). Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('🍷 Föreslå dryck', '🍷 Suggest a drink'), enrich: 'drinks' }); return; }
