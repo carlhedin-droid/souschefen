@@ -252,14 +252,17 @@ function priceText(P) {
   if (a) return L(`från ${a} kr`, `from SEK ${a}`);
   return L('valfritt pris', 'any price');
 }
-// Skafferiet: det familjen alltid har hemma. Startar med vanliga basvaror; resten föreslås utifrån favoritländerna.
-const BASE_PANTRY = ['Salt', 'Svartpeppar', 'Neutral olja', 'Olivolja', 'Smör', 'Vetemjöl', 'Strösocker', 'Gul lök', 'Vitlök', 'Buljong', 'Japansk soja', 'Vinäger'];
-const PANTRY_DEFAULTS = { pantry: BASE_PANTRY.slice() };
+// Skafferiet: basvaror som INTE är självklara (kokosmjölk, sesamolja, fisksås …), föreslås utifrån favoritländerna.
+// Självklarheterna (salt, socker, mjöl, matolja, smör, lök …) finns alltid, räknas aldrig som inköp och visas inte i skafferiet.
+const GIVENS = ['Salt', 'Svartpeppar', 'Strösocker', 'Vetemjöl', 'Neutral olja', 'Olivolja', 'Smör', 'Gul lök', 'Vitlök', 'Buljong', 'Japansk soja', 'Vinäger', 'Vatten'];
+const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|gul lok|gula lokar|lok|lokar|vitlok|vitloksklyfta|vitloksklyftor|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
+const isGiven = name => GIVEN_RE.test(fold(name).replace(/\(.*?\)/g, '').replace(/,.*$/, '').replace(/\s+/g, ' ').trim());
+const PANTRY_DEFAULTS = { pantry: [] };
 const DRINK_DEFAULTS = { drinkPriceFrom: '120', drinkPriceTo: '200', drinkNA: true, drinkWeekday: false, drinkEco: false, drinkLike: [], drinkLikes: '', drinkAvoid: '', drinkPack: [], drinkRange: [] };
 const DRINK_KINDS = ['Rött', 'Vitt', 'Rosé', 'Mousserande', 'Öl', 'Cider'];
 const DRINK_PACKS = { 'Glasflaska': 'glasflaska', 'Box': 'box' };
 const DRINK_RANGES = { 'Fast sortiment': 'Fast sortiment', 'Tillfälligt sortiment': 'Tillfälligt sortiment', 'Beställningssortiment': 'Ordervaror' };
-const pantryOf = P => Array.isArray(P.pantry) ? P.pantry : (P.pantry = BASE_PANTRY.slice());
+const pantryOf = P => { if (!Array.isArray(P.pantry)) P.pantry = []; else if (P.pantry.some(isGiven)) P.pantry = P.pantry.filter(x => !isGiven(x)); return P.pantry; };
 const drinkArr = (P, k) => Array.isArray(P[k]) ? P[k] : (P[k] = []);
 const BREAD_DEFAULTS = { breadLeaven: [], breadStarter: false, breadProof: '', breadKnead: '', breadHydration: '', breadFlour: [], breadBake: [], breadNote: '' };
 const CARL_PREFS = {
@@ -356,7 +359,7 @@ Regler:
 - Receptets extra delar (kort, konkret, inget fyllnadsprat):
   - "overview": 2–3 korta rader om hur rätten görs, i ordning.
   - "activeTime": tid vid spisen. "time" är total tid inklusive väntan. "ahead": det som måste göras i förväg (marinering, blötläggning, deg som jäser, vila) med minsta och bästa tid, annars null.
-  - "pantry": true om ingrediensen finns i SKAFFERIET (även med annat namn, t.ex. "rapsolja" = Neutral olja) eller är självklar i alla kök (salt, peppar, vatten). Annars false.
+  - "pantry": true om ingrediensen finns i SKAFFERIET (även med annat namn, t.ex. "rapsolja" = Neutral olja) eller är en SJÄLVKLARHET (se nedan, t.ex. salt, socker, matolja, smör, lök). Annars false.
   - "swaps": bara för 2–5 ingredienser där ett byte är vanligt (svår att hitta, dyr, allergi, smak). 1–3 alternativ var med mängd och varför. Krockar aldrig med ALLERGIER OCH ÄTER INTE. Annars [].
   - "optional": true för steg som går att hoppa över utan att rätten faller (garnering, mixning, rostning av extra topping).
   - "howTo": för 1–3 tekniska moment som är lättare att se än att läsa (vika dumplings, filea fisk, temperera choklad, knåda deg): en kort YouTube-sökterm PÅ ENGELSKA. Annars null.
@@ -754,7 +757,8 @@ function prefsText(d) {
 - Favoritländer (sprid förslagen över dessa kök): ${P.cuisines.join(', ') || 'alla'}
 - Standardutrustning (finns alltid): ${STANDARD_KITCHEN}
 - Specialutrustning vi har: ${equip.join(', ') || 'ingen utöver standard'}${breadText(P)}
-- Skafferiet (har vi alltid hemma, använd fritt och räkna inte som inköp): ${pantryOf(P).join(', ') || '(tomt)'}
+- Självklarheter (finns alltid, räkna inte som inköp): ${GIVENS.join(', ')}
+- Skafferiet (har vi också alltid hemma, använd fritt och räkna inte som inköp): ${pantryOf(P).join(', ') || '(tomt)'}
 - Dryckestips: ${d.weekend || P.drinkWeekday ? `JA – fyll "drinks" i varje recept. Pris per flaska: ${(() => { const a = kr(P.drinkPriceFrom), b = kr(P.drinkPriceTo); return a && b ? `${Math.min(a, b)}–${Math.max(a, b)} kr` : b ? `upp till ${b} kr` : a ? `från ${a} kr` : 'valfritt' })()}${P.drinkNA ? '. Ge alltid ett alkoholfritt alternativ' : ''}${drinkArr(P, 'drinkLike').length ? `. Vi dricker helst: ${P.drinkLike.join(', ')} – lägg dem först och föreslå bara annat när maten verkligen kräver det (säg då varför)` : ''}${(P.drinkLikes || '').trim() ? `. Vi gillar: ${P.drinkLikes.trim()}` : ''}${(P.drinkAvoid || '').trim() ? `. Vi undviker: ${P.drinkAvoid.trim()}` : ''}${drinkArr(P, 'drinkRange').length ? `. Vi handlar gärna i: ${P.drinkRange.join(', ')}` : ''}` : 'nej – sätt "drinks" till null om vi inte ber om det'}`;
 }
 function stripRecipe(r) {
@@ -1457,10 +1461,10 @@ async function suggestPantry() {
   try {
     const o = await geminiJSON(`Föreslå basvaror som en familj som lagar mat från dessa länder bör ha hemma i skafferiet, kylen eller frysen: ${P.cuisines.join(', ') || 'Sverige'}.
 Utrustning: ${[...P.equipment, ...P.customEquipment].join(', ') || 'vanligt kök'}. De har redan: ${pantryOf(P).join(', ')}.
-Bara sådant som håller länge och används i många rätter (såser, kryddor, oljor, torrvaror, konserver) – inte färskvaror. 4–8 per grupp, hoppa över det de redan har. Namn på ${L('svenska, som de heter i en svensk butik', 'English')}.
+Bara sådant som håller länge och används i många rätter (såser, kryddor, oljor, torrvaror, konserver) – inte färskvaror. Föreslå ALDRIG självklarheter som alla kök har (${GIVENS.join(', ')}, mjölk, ägg, ättika) utan det som är typiskt för köken, t.ex. kokosmjölk, sesamolja, fisksås. 4–8 per grupp, hoppa över det de redan har. Namn på ${L('svenska, som de heter i en svensk butik', 'English')}.
 Svara ENDAST med JSON: {"groups":[{"group":"${L('Thailand', 'Thailand')}","items":["${L('Fisksås', 'Fish sauce')}"]}]}`);
     const have = new Set(pantryOf(P).map(fold));
-    S.pantrySugg = (Array.isArray(o.groups) ? o.groups : []).map(g => ({ group: String(g.group || ''), items: (Array.isArray(g.items) ? g.items : []).map(x => String(x).trim()).filter(x => x && !have.has(fold(x))).slice(0, 10) })).filter(g => g.group && g.items.length);
+    S.pantrySugg = (Array.isArray(o.groups) ? o.groups : []).map(g => ({ group: String(g.group || ''), items: (Array.isArray(g.items) ? g.items : []).map(x => String(x).trim()).filter(x => x && !isGiven(x) && !have.has(fold(x))).slice(0, 10) })).filter(g => g.group && g.items.length);
     if (!S.pantrySugg.length) S.pantryErr = L('Souschefen hittade inget att lägga till.', 'The sous-chef found nothing to add.');
   } catch (e) { S.pantryErr = e.message || String(e); }
   finally { S.pantryBusy = false; keepScroll(renderStage); }
@@ -1468,16 +1472,20 @@ Svara ENDAST med JSON: {"groups":[{"group":"${L('Thailand', 'Thailand')}","items
 function pantryToggle(v, on) {
   const P = S.data.prefs, list = pantryOf(P), k = fold(v), has = list.some(x => fold(x) === k);
   if (on === undefined) on = !has;
+  if (on && isGiven(v)) { toast(L(`${v.trim()} räknas redan som självklart – behövs inte i skafferiet`, `${v.trim()} already counts as a given – no need to add it`)); return; }
   P.pantry = on ? (has ? list : [...list, v.trim()]) : list.filter(x => fold(x) !== k);
   prefsChanged(); keepScroll(renderStage);
 }
 /* ============ Inköpslistan (data i familjens Firestore, appen finns på /lista/) ============ */
 const SHOP_URL = 'lista/';
-const ALWAYS_HOME = /^(salt|flingsalt|havssalt|peppar|svartpeppar|vitpeppar|vatten|kranvatten|isvatten|is)$/;
+// Mataffärslista: kind 'grocery', eller (äldre listor utan kind) ett namn som låter som en matbutik
+const GROCERY_NAME = /^(mat|maten|matvaror|mataffar(en)?|matbutik(en)?|livsmedel|groceries|grocery|food|ica|coop|willys|hemkop|lidl|city gross|citygross|mathem|matsmart|tempo|netto)\b/;
+const isGroceryList = l => !!l && (l.kind ? l.kind === 'grocery' : GROCERY_NAME.test(fold(l.name)));
+const shopIsGrocery = sh => isGroceryList(sh?.lists?.find(l => l.id === sh.listId));
+const shopSelFor = (rows, grocery) => Object.fromEntries(rows.map(x => [x.id, grocery ? !x.have : true]));
 function isPantryIng(i) {
-  if (i.pantry) return true;
+  if (i.pantry || isGiven(i.name)) return true;
   const n = fold(i.name).replace(/\(.*?\)/g, '').replace(/,.*$/, '').trim();
-  if (ALWAYS_HOME.test(n)) return true;
   return pantryOf(S.data.prefs).some(p => { const q = fold(p); return q.length >= 3 && (n === q || n.includes(q) || (n.length >= 4 && q.includes(n))); });
 }
 function shopRows(r, f) {
@@ -1493,14 +1501,15 @@ async function openShop() {
   try {
     let q = await famCol('lists').get();
     let lists = q.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (!lists.length) { const ref = famCol('lists').doc(); const l = { name: L('Mat', 'Groceries'), order: 0, createdAt: Date.now() }; await ref.set(l); lists = [{ id: ref.id, ...l }]; }
+    if (!lists.length) { const ref = famCol('lists').doc(); const l = { name: L('Mat', 'Groceries'), kind: 'grocery', order: 0, createdAt: Date.now() }; await ref.set(l); lists = [{ id: ref.id, ...l }]; }
     S.shop.lists = lists;
-    if (!lists.some(l => l.id === S.shop.listId)) S.shop.listId = lists[0].id;
+    if (!lists.some(l => l.id === S.shop.listId)) S.shop.listId = (lists.find(isGroceryList) || lists[0]).id;
+    if (!shopIsGrocery(S.shop)) S.shop.sel = shopSelFor(rows, false);
   } catch (e) { S.shop.err = L('Kunde inte läsa inköpslistorna: ', 'Could not read the shopping lists: ') + (e.message || e); }
   keepScroll(renderStage);
 }
 function shopSheet(r, f) {
-  const sh = S.shop, rows = shopRows(r, f), buy = rows.filter(x => !x.have), have = rows.filter(x => x.have);
+  const sh = S.shop, rows = shopRows(r, f), grocery = !sh.lists || shopIsGrocery(sh), buy = grocery ? rows.filter(x => !x.have) : rows, have = grocery ? rows.filter(x => x.have) : [];
   const n = rows.filter(x => sh.sel[x.id]).length;
   const row = x => `<label class="shop-row"><input type="checkbox" data-shopsel="${esc(x.id)}" ${sh.sel[x.id] ? 'checked' : ''}><span class="name">${esc(x.name)}</span><span class="amt">${esc(x.qty)}</span></label>`;
   return `<div class="sheet-backdrop" data-shopclose></div>
@@ -1510,7 +1519,7 @@ function shopSheet(r, f) {
     ${sh.err ? `<p class="wine-err">${esc(sh.err)}</p>` : ''}
     ${sh.lists ? `<div class="chips shop-lists" role="radiogroup" aria-label="${L('Lista', 'List')}">${sh.lists.map(l => `<button type="button" class="chip opt" role="radio" data-shoplist="${esc(l.id)}" aria-pressed="${l.id === sh.listId}" aria-checked="${l.id === sh.listId}">${esc(l.name)}</button>`).join('')}</div>` : (sh.err ? '' : `<p class="muted">${L('Hämtar listorna…', 'Loading lists…')}</p>`)}
     <div class="sheet-body">
-      ${buy.length ? `<h3>${L('Att handla', 'To buy')}</h3>${buy.map(row).join('')}` : ''}
+      ${buy.length ? `${grocery ? `<h3>${L('Att handla', 'To buy')}</h3>` : ''}${buy.map(row).join('')}` : ''}
       ${have.length ? `<h3>${L('Har ni troligen hemma', 'You probably have')}</h3><p class="hint">${L('Bocka i det som är slut.', 'Tick what you have run out of.')}</p>${have.map(row).join('')}` : ''}
     </div>
     <div class="sheet-foot"><button class="btn" data-shopadd ${!sh.lists || !n || sh.busy ? 'disabled' : ''}>${sh.busy ? L('Lägger till…', 'Adding…') : L(`Lägg till ${n} ${n === 1 ? 'vara' : 'varor'}`, `Add ${n} ${n === 1 ? 'item' : 'items'}`)}</button>
@@ -1698,7 +1707,7 @@ function prefsSections() {
       ${P.customEquipment.length ? `<div class="chips">${P.customEquipment.map(v => `<button type="button" class="chip opt" data-premove="${esc(v)}" aria-pressed="true" title="${L('Tryck för att ta bort', 'Tap to remove')}">${esc(v)} ×</button>`).join('')}</div>` : ''}
       <div class="add-row"><input id="equipNew" placeholder="${L('Lägg till egen, t.ex. Plancha', 'Add your own, e.g. Plancha')}" aria-label="${L('Egen utrustning', 'Your own equipment')}"><button class="ghost" data-equipadd>${L('Lägg till', 'Add')}</button></div>`),
     sec('pantry', L('Skafferiet', 'Pantry'), `
-      <p class="hint ss-lead">${L('Det ni alltid har hemma. Souschefen använder det fritt, och i inköpslistan hamnar det under "Har ni troligen hemma".', 'What you always have at home. The sous-chef uses it freely, and in the shopping list it goes under "You probably have".')}</p>
+      <p class="hint ss-lead">${L('Basvaror ni alltid har hemma utöver självklarheterna (salt, socker, mjöl, matolja, smör, lök m.m.), t.ex. kokosmjölk och sesamolja. Souschefen använder dem fritt, och när ni handlar till mataffären hamnar de under "Har ni troligen hemma".', 'Staples you always have beyond the obvious (salt, sugar, flour, oil, butter, onion etc.), e.g. coconut milk and sesame oil. The sous-chef uses them freely, and when you shop for the grocery store they go under "You probably have".')}</p>
       <div class="chips">${pantryOf(P).map(v => `<button type="button" class="chip opt" data-pantryrm="${esc(v)}" aria-pressed="true" title="${L('Tryck för att ta bort', 'Tap to remove')}">${esc(v)} ×</button>`).join('')}</div>
       <div class="add-row"><input id="pantryNew" placeholder="${L('Lägg till, t.ex. Fisksås', 'Add, e.g. Fish sauce')}" aria-label="${L('Ny basvara', 'New staple')}"><button class="ghost" data-pantryadd>${L('Lägg till', 'Add')}</button></div>
       <div class="pantry-suggest">
@@ -1930,13 +1939,15 @@ $('#stage').addEventListener('click', async e => {
   if (sv) { const r = S.current.recipe, x = r.serveWith?.[+sv.dataset.serve]; if (x) send(L(`Ge mig det kompletta receptet på ${x.name} som tillbehör till ${r.title}, för samma antal portioner.`, `Give me the complete recipe for ${x.name} as a side for ${r.title}, for the same number of servings.`), null, { flow: true, newDish: true }); return; }
   if (t.closest('[data-shopopen]')) { openShop(); return; }
   if (t.closest('[data-shopclose]')) { S.shop = null; keepScroll(renderStage); return; }
-  const shl = t.closest('[data-shoplist]'); if (shl) { S.shop.listId = shl.dataset.shoplist; keepScroll(renderStage); return; }
+  const shl = t.closest('[data-shoplist]'); if (shl) { const was = shopIsGrocery(S.shop); S.shop.listId = shl.dataset.shoplist; const now = shopIsGrocery(S.shop);
+    if (was !== now && S.current.recipe) { const r = S.current.recipe; S.shop.sel = shopSelFor(shopRows(r, portionsFor(r) / (r.servings || 4)), now); }
+    keepScroll(renderStage); return; }
   const shs = t.closest('[data-shopsel]'); if (shs) { S.shop.sel[shs.dataset.shopsel] = shs.checked; keepScroll(renderStage); return; }
   if (t.closest('[data-shopadd]')) { addToShop(); return; }
   const prm = t.closest('[data-pantryrm]'); if (prm) { pantryToggle(prm.dataset.pantryrm, false); return; }
   const ppk = t.closest('[data-pantrypick]'); if (ppk) { pantryToggle(ppk.dataset.pantrypick); return; }
   if (t.closest('[data-pantrysuggest]')) { suggestPantry(); return; }
-  if (t.closest('[data-pantryadd]')) { const el = $('#pantryNew'); const v = (el?.value || '').trim(); if (v) { v.split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => { const P = S.data.prefs; if (!pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
+  if (t.closest('[data-pantryadd]')) { const el = $('#pantryNew'); const v = (el?.value || '').trim(); if (v) { v.split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => { const P = S.data.prefs; if (!isGiven(x) && !pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
   if (t.closest('[data-drinks]')) { openChat(true); send(L('Föreslå dryck till receptet: fyll "drinks" enligt Dryckestips (varför, 2–3 alternativ med typ, smakstil, druva och vad man letar efter, prisråd och ett alkoholfritt alternativ – inga specifika flaskor). Ändra INTE ingredienserna eller stegen. Skicka HELA receptet i "recipe".', 'Suggest drinks for the recipe: fill "drinks" (why, 2–3 options with kind, taste, grape and what to look for, a price tip and an alcohol-free option – no specific bottles). Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('🍷 Föreslå dryck', '🍷 Suggest a drink'), enrich: 'drinks' }); return; }
   if (t.closest('[data-enrich]')) { openChat(true); send(L('Komplettera receptet med "title" för varje steg, översikt, aktiv tid, det som måste göras i förväg, byten för ingredienser, valfria steg, "howTo" för svåra moment, om det går fel, servera med och förvaring. Ändra INTE ingredienserna eller stegens text. Skicka HELA receptet i "recipe".', 'Add a "title" to every step, an overview, active time, what must be done ahead, ingredient swaps, optional steps, "howTo" for tricky techniques, troubleshooting, serve-with ideas and storage to the recipe. Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('Lägg till stegrubriker, översikt och tips', 'Add step headings, overview and tips'), enrich: true }); return; }
   // Recept

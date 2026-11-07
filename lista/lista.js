@@ -56,7 +56,7 @@
     const f = db.collection('families').doc(S.fid);
     unsubs.push(f.collection('lists').onSnapshot(q => {
       S.lists = q.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name).localeCompare(b.name));
-      if (!S.lists.length && !q.metadata.fromCache) { createList(L('Mat', 'Groceries')); return; }
+      if (!S.lists.length && !q.metadata.fromCache) { createList(L('Mat', 'Groceries')); return; }   // blir mataffär via namnet
       if (!S.lists.some(l => l.id === S.listId)) S.listId = S.lists[0]?.id || '';
       S.listsLoaded = true; S.ready = true; render();
     }, onErr));
@@ -66,12 +66,41 @@
   function onErr(e) { console.warn('Firestore', e); S.err = e.message || String(e); render(); }
   const fam = n => db.collection('families').doc(S.fid).collection(n);
 
+  /* ---------- Mataffär: avdelningar och skafferi gäller bara mataffärslistor ---------- */
+  const GROCERY_NAME = /^(mat|maten|matvaror|mataffar(en)?|matbutik(en)?|livsmedel|groceries|grocery|food|ica|coop|willys|hemkop|lidl|city gross|citygross|mathem|matsmart|tempo|netto)\b/;
+  const isGrocery = l => !!l && (l.kind ? l.kind === 'grocery' : GROCERY_NAME.test(fold(l.name)));
+  // Självklarheter visas aldrig i skafferiet (samma lista som i Souschefen)
+  const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|gul lok|gula lokar|lok|lokar|vitlok|vitloksklyfta|vitloksklyftor|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
+  const isGiven = x => GIVEN_RE.test(fold(x).replace(/\(.*?\)/g, '').replace(/,.*$/, '').trim());
+  // Avdelningar i ungefär den ordning man går i en svensk butik. Regler prövas i PRIO-ordning (mest specifika först).
+  const DEPTS = [
+    ['frukt', '🥬', 'Frukt & grönt', 'Fruit & veg'], ['brod', '🍞', 'Bröd', 'Bread'], ['kott', '🥩', 'Kött, fågel & chark', 'Meat & deli'],
+    ['fisk', '🐟', 'Fisk & skaldjur', 'Fish & seafood'], ['mejeri', '🥛', 'Mejeri & ägg', 'Dairy & eggs'], ['ost', '🧀', 'Ost', 'Cheese'],
+    ['torr', '🍝', 'Pasta, ris & bakning', 'Pasta, rice & baking'], ['krydd', '🧂', 'Kryddor, såser & oljor', 'Spices, sauces & oils'],
+    ['konserv', '🥫', 'Konserver & världens mat', 'Tins & world foods'], ['fryst', '❄️', 'Fryst', 'Frozen'], ['dryck', '🥤', 'Dryck', 'Drinks'],
+    ['snacks', '🍫', 'Snacks & godis', 'Snacks & sweets'], ['hushall', '🧻', 'Hushåll & hygien', 'Household'], ['ovrigt', '🛒', 'Övrigt', 'Other']];
+  const RULES = [
+    ['fryst', /\b(fryst|frysta|djupfryst|frozen)\b|glass\b|ice cream|fryspizza|pommes/],
+    ['hushall', /toalettpapper|toapapper|hushallspapper|bakplatspapper|kokspapper|diskmedel|disktabletter|tvattmedel|skoljmedel|\btval|schampo|balsam\b|tandkram|tandborst|tandtrad|(?<!te)pas(e|ar)\b|plastfolie|aluminiumfolie|folie\b|blojor|servett|batteri|deodorant|rengoring|wettex|disktrasa|stearin|bomullspinn|detergent|soap|shampoo|toilet|napkin/],
+    ['konserv', /kokosmjolk|kokosgradde|krossade tomater|tomatpure|passerade tomater|passata|konserv|burk|bonor\b|kikartor|linser|majs\b|oliver\b|kapris|jordnotssmor|nutella|sylt|marmelad|rispapper|tortilla|taco|nori|currypasta|curry paste|tonfisk|sardiner|ansjovis|kimchi|vattenkastanj|bambuskott|coconut milk|canned|chickpea|beans|lentil/],
+    ['torr', /pasta|spaghetti|penne|makaroner|lasagneplattor|tagliatelle|fusilli|nudlar|noodles|\b(jasmin|basmati|sushi|fullkorns|parboiled|arborio|risotto|klibbigt )?ris\b|bulgur|couscous|quinoa|mjol(?![ki])|socker(?!art)|bakpulver|bikarbonat|jast|vanilj|kakao|havregryn|gryn\b|musli|flingor|strobrod|panko|majsstarkelse|polenta|notter|mandel|cashew|pinjenot|sesamfro|fro\b|russin|dadlar|flour|sugar|\brice\b|oats|nuts/],
+    ['krydd', /buljong|\bfond\b|salt\b|peppar\b|pulver|malen|malda|torkad|kanel|kardemumma|muskot|nejlik|lagerblad|oregano|curry|garam|kurkuma|kummin|chiliflakes|flakes|sambal|sriracha|ketchup|senap|majonnas|soja|fisksas|ostronsas|hoisin|sas\b|sasen|dressing|vinager|attika|olja|honung|sirap|gochujang|miso|tahini|pesto|tabasco|worcester|stock\b|sauce|oil\b|vinegar|spice|mustard|mayo/],
+    ['frukt', /lok\b|lokar|purjo|potatis|morot|morotter|palsternacka|selleri|kal\b|kalrot|broccoli|paprika|tomat|gurka|sallad|ruccola|spenat|zucchini|aubergine|squash|pumpa|svamp|champinjon|kantarell|shiitake|avokado|citron|lime|apelsin|clementin|apple|banan|paron|druv|bar\b|hallon|jordgubb|mango|ananas|melon|kiwi|ingefara|chili|jalapeno|koriander|persilja|basilika|dill\b|mynta|timjan|rosmarin|ort\b|orter|majskolv|sockerart|sugarsnap|haricots|edamame|groddar|bok choy|pak choi|citrongras|kaffir|rodbeta|betor|fankal|sparris|kronartskocka|onion|garlic|potato|carrot|lemon|apple|herbs|ginger|lettuce/],
+    ['brod', /brod\b|brod|limpa|baguette|fralla|frallor|bullar|naan|knacke|ciabatta|surdeg|toast|bread|\bbuns?\b|wraps?\b/],
+    ['fisk', /\blax|torsk|\bsej\b|kolja|fisk|rakor|\braka\b|scampi|musslor|krabba|hummer|krafto|sill\b|makrill|rodspatta|halleflundra|\bgos\b|abborre|blackfisk|skaldjur|salmon|\bcod\b|shrimp|prawn|fish/],
+    ['kott', /kott|\bgris|fars(?!k)|kyckling|kalkon|anka\b|ankbrost|flask|bacon|skinka|korv|chorizo|salami|prosciutto|pancetta|lamm|entrecote|oxfile|flankstek|ryggbiff|biff|karre|revben|kotlett|hogrev|bringa|grytbitar|vilt|\balg\b|hjort|pastej|beef|chicken|pork|lamb|mince|sausage|\bham\b/],
+    ['ost', /\bost\b|ost$|ostar|parmesan|mozzarella|feta|halloumi|cheddar|chevre|brie|gorgonzola|pecorino|grana padano|mascarpone|ricotta|farskost|philadelphia|cheese|paneer|vasterbotten|prastost|greve\b/],
+    ['mejeri', /mjolk|\bfil\b|filmjolk|yoghurt|yogurt|gradde|creme fraiche|kvarg|kesella|keso|smetana|smor|margarin|bregott|\bagg|kefir|havredryck|sojadryck|milk|cream|butter|\beggs?\b/],
+    ['dryck', /tepas|juice|lask|\bol\b|lattol|\bvin\b|rodvin|vitt vin|cider|mineralvatten|kolsyrat|kaffe|\bte\b|saft|cola|lemonad|smoothie|dryck|coffee|\btea\b|wine|beer/],
+    ['snacks', /chips|godis|choklad|popcorn|notmix|dipp|kex|kakor|cookies|snacks|candy/]];
+  const deptOf = text => { const n = fold(text); return (RULES.find(([, re]) => re.test(n)) || ['ovrigt'])[0]; };
+
   /* ---------- Ändringar ---------- */
   async function createList(name) {
     const order = S.lists.reduce((m, l) => Math.max(m, l.order ?? 0), -1) + 1;
     const ref = fam('lists').doc();
     S.listId = ref.id; lsSet('hl.list', ref.id);
-    await ref.set({ name: name.trim(), order, createdAt: Date.now() });
+    await ref.set({ name: name.trim(), kind: isGrocery({ name }) ? 'grocery' : 'other', order, createdAt: Date.now() });
   }
   const QTY_RE = /^\s*(\d+(?:[.,/]\d+)?\s*(?:st|g|kg|hg|dl|cl|ml|l|msk|tsk|krm|förp|forp|paket|pkt|burk|burkar|flaskor|flaska|x|pcs|pack|cans?|bottles?)?\.?)\s+(.+)$/i;
   const UNIT = '(?:st|g|kg|hg|dl|cl|ml|l|msk|tsk|krm|förp|forp|paket|pkt|burk|burkar|flaskor|flaska|pcs|pack|cans?|bottles?)';
@@ -101,6 +130,7 @@
     const b = db.batch(); S.items.filter(i => i.listId === id).forEach(i => b.delete(fam('items').doc(i.id))); b.delete(fam('lists').doc(id));
     b.commit().catch(onErr); S.panel = '';
   }
+  function setKind(id, grocery) { fam('lists').doc(id).update({ kind: grocery ? 'grocery' : 'other' }).catch(onErr); }
   function renameList(id, name) { if (name.trim()) fam('lists').doc(id).update({ name: name.trim() }).catch(onErr); S.panel = ''; render(); }
 
   /* ---------- Visning ---------- */
@@ -131,19 +161,23 @@
     form.hidden = !cur;
 
     // Verktyg för listan
+    const grocery = isGrocery(cur);
+    if (!grocery && S.panel === 'pantry') S.panel = '';
+    const pantry = S.pantry.filter(p => !isGiven(p));
     let toolsHtml = cur ? `<div class="hl-tools">
-      <button type="button" class="ghost small" data-panel="pantry" aria-pressed="${S.panel === 'pantry'}">🥫 ${L('Fyll på skafferiet', 'Restock pantry')}</button>
+      ${grocery ? `<button type="button" class="ghost small" data-panel="pantry" aria-pressed="${S.panel === 'pantry'}">🥫 ${L('Fyll på skafferiet', 'Restock pantry')}</button>` : ''}
       <button type="button" class="ghost small" data-panel="edit" aria-pressed="${S.panel === 'edit'}" aria-label="${L('Ändra listan', 'Edit list')}">⋯</button></div>` : '';
     if (S.panel === 'new') toolsHtml += `<div class="hl-panel"><form data-newlist><label for="newList">${L('Ny lista', 'New list')}</label>
         <div class="hl-row"><input id="newList" placeholder="${L('T.ex. Bauhaus', 'E.g. Bauhaus')}"><button class="btn small" type="submit">${L('Skapa', 'Create')}</button></div>
         <div class="chips">${PRESETS().filter(p => !S.lists.some(l => fold(l.name) === fold(p))).map(p => `<button type="button" class="chip" data-preset="${esc(p)}">${esc(p)}</button>`).join('')}</div></form></div>`;
     if (S.panel === 'edit' && cur) toolsHtml += `<div class="hl-panel"><form data-rename><label for="renameList">${L('Namn', 'Name')}</label>
         <div class="hl-row"><input id="renameList" value="${esc(cur.name)}"><button class="btn small" type="submit">${L('Spara', 'Save')}</button></div></form>
+        <label class="hl-kind"><input type="checkbox" data-kind ${grocery ? 'checked' : ''}> ${L('Mataffär – sortera på avdelningar och visa skafferiet', 'Grocery store – sort by aisle and show the pantry')}</label>
         <div class="hl-row" style="margin-top:10px"><button type="button" class="ghost small danger" data-dellist>${L('Ta bort listan', 'Delete list')}</button></div></div>`;
     if (S.panel === 'pantry' && cur) {
       const onList = new Set(S.items.filter(i => i.listId === S.listId && !i.done).map(i => fold(i.text)));
       toolsHtml += `<div class="hl-panel"><p class="hint">${L('Tryck på det som är slut. Skafferiet ändrar du i Souschefen under Inställningar.', 'Tap what has run out. Edit the pantry in Souschefen under Settings.')}</p>
-        ${S.pantry.length ? `<div class="chips">${S.pantry.map(p => `<button type="button" class="chip opt" data-pantry="${esc(p)}" aria-pressed="${onList.has(fold(p))}">${esc(p)}</button>`).join('')}</div>` : `<p class="muted">${L('Skafferiet är tomt.', 'The pantry is empty.')}</p>`}</div>`;
+        ${pantry.length ? `<div class="chips">${pantry.map(p => `<button type="button" class="chip opt" data-pantry="${esc(p)}" aria-pressed="${onList.has(fold(p))}">${esc(p)}</button>`).join('')}</div>` : `<p class="muted">${L('Skafferiet är tomt.', 'The pantry is empty.')}</p>`}</div>`;
     }
     tools.innerHTML = toolsHtml;
 
@@ -152,12 +186,19 @@
     const open = mine.filter(i => !i.done).sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
     const done = mine.filter(i => i.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     const groups = []; const by = {};
-    open.forEach(i => { const k = i.recipe || ''; if (!by[k]) groups.push(by[k] = { name: k, items: [] }); by[k].items.push(i); });
-    groups.sort((a, b) => (a.name ? 1 : 0) - (b.name ? 1 : 0));
+    if (grocery) {   // mataffär: per avdelning, i butiksordning
+      open.forEach(i => { const k = deptOf(i.text); if (!by[k]) groups.push(by[k] = { dept: k, items: [] }); by[k].items.push(i); });
+      const ord = Object.fromEntries(DEPTS.map((d, n) => [d[0], n]));
+      groups.sort((a, b) => ord[a.dept] - ord[b.dept]);
+      groups.forEach(g => { const d = DEPTS[ord[g.dept]]; g.name = `${d[1]} ${L(d[2], d[3])}`; });
+    } else {         // övriga listor: som de lades till, recepten för sig
+      open.forEach(i => { const k = i.recipe || ''; if (!by[k]) groups.push(by[k] = { name: k ? `${L('Från', 'From')} ${k}` : '', items: [] }); by[k].items.push(i); });
+      groups.sort((a, b) => (a.name ? 1 : 0) - (b.name ? 1 : 0));
+    }
     const row = i => `<li class="hl-item${i.done ? ' done' : ''}">
-        <button type="button" class="hl-check" data-toggle="${esc(i.id)}" aria-pressed="${!!i.done}"><span class="box" aria-hidden="true"></span><span class="txt">${esc(i.text)}</span>${i.qty ? `<span class="qty">${esc(i.qty)}</span>` : ''}</button>
+        <button type="button" class="hl-check" data-toggle="${esc(i.id)}" aria-pressed="${!!i.done}"><span class="box" aria-hidden="true"></span><span class="txt">${esc(i.text)}${grocery && i.recipe && !i.done ? `<small class="src">${esc(i.recipe)}</small>` : ''}</span>${i.qty ? `<span class="qty">${esc(i.qty)}</span>` : ''}</button>
         <button type="button" class="hl-del" data-del="${esc(i.id)}" aria-label="${L(`Ta bort ${esc(i.text)}`, `Remove ${esc(i.text)}`)}">×</button></li>`;
-    main.innerHTML = (open.length ? groups.map(g => `${g.name ? `<h2 class="hl-group">${L('Från', 'From')} ${esc(g.name)}</h2>` : ''}<ul class="hl-items">${g.items.map(row).join('')}</ul>`).join('')
+    main.innerHTML = (open.length ? groups.map(g => `${g.name ? `<h2 class="hl-group">${esc(g.name)}</h2>` : ''}<ul class="hl-items">${g.items.map(row).join('')}</ul>`).join('')
         : `<div class="hl-empty small"><p>${done.length ? L('Allt är handlat 🎉', 'All done 🎉') : L('Listan är tom. Skriv ovan, eller tryck på "Till inköpslistan" i ett recept i Souschefen.', 'The list is empty. Type above, or tap "To shopping list" on a recipe in Souschefen.')}</p></div>`)
       + (done.length ? `<div class="hl-done"><div class="hl-done-head"><button type="button" class="hl-done-toggle" data-showdone aria-expanded="${S.showDone}">${L('I korgen', 'In the basket')} (${done.length})</button>
           <button type="button" class="ghost small" data-cleardone>${L('Rensa', 'Clear')}</button></div>${S.showDone ? `<ul class="hl-items">${done.map(row).join('')}</ul>` : ''}</div>` : '')
@@ -183,6 +224,7 @@
     const pn = t.closest('[data-panel]'); if (pn) { S.panel = S.panel === pn.dataset.panel ? '' : pn.dataset.panel; render(); if (S.panel === 'new') $('#newList')?.focus(); return; }
     const pr = t.closest('[data-preset]'); if (pr) { S.panel = ''; createList(pr.dataset.preset); render(); return; }
     if (t.closest('[data-dellist]')) { deleteList(S.listId); return; }
+    const kd = t.closest('[data-kind]'); if (kd) { setKind(S.listId, kd.checked); return; }
     const pa = t.closest('[data-pantry]'); if (pa) { if (pa.getAttribute('aria-pressed') !== 'true') { addItems([pa.dataset.pantry], { recipe: L('Skafferiet', 'Pantry') }); } return; }
     const tg = t.closest('[data-toggle]'); if (tg) { toggle(tg.dataset.toggle); return; }
     const dl = t.closest('[data-del]'); if (dl) { removeItem(dl.dataset.del); return; }

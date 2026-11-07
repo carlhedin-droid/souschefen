@@ -60,3 +60,7 @@ body.hl-body { overflow: auto; height: auto; min-height: 100%; }
 .hl-empty h2 { font-family: var(--font-display); }
 .hl-empty p { max-width: 42ch; margin: 8px auto 18px; }
 .hl-err { color: var(--sambal); font-size: 14.5px; margin-top: 12px; }
+
+.hl-check .src { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; text-decoration: none; }
+.hl-kind { display: flex !important; align-items: center; gap: 8px; font-weight: 600 !important; margin-top: 12px; font-size: 15px; }
+.hl-kind input { width: 20px; height: 20px; accent-color: var(--pandan); }

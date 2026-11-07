@@ -1,6 +1,6 @@
 /* Inköpslistan: nätet först, cache som reserv – så att listan öppnas även utan täckning i butiken.
    Firestore sköter själva datan offline. */
-const CACHE = 'handla-v1';
+const CACHE = 'handla-v2';
 const HOSTS = [self.location.origin, 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
