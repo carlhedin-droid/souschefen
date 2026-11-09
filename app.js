@@ -1190,6 +1190,7 @@ landscapeMQ.addEventListener?.('change', updateSplit);
 function renderStage() {
   const st = $('#stage');
   const v = S.route.view;
+  if (v === 'recipe') prefetchVoice();
   st.classList.toggle('recipe-view', v === 'recipe' && !!S.current.recipe);
   updateSplit();
   if (v === 'home') st.innerHTML = viewHome();
@@ -1587,7 +1588,27 @@ function audioFrom(data, mime) {
   return pcmToWav(bytes, +(m.match(/rate=(\d+)/) || [])[1] || 24000);   // audio/l16 eller pcm
 }
 // Gemini TTS: Interactions-API:t (gemini-3.8-flash-tts, stöder svenska); äldre generateContent-formatet som reserv
-async function ttsAudio(text, voice) {
+const ttsPending = {};
+function ttsAudio(text, voice) {
+  const k = `${voice}|${strHash(text)}`;
+  if (!ttsPending[k]) ttsPending[k] = ttsAudioRaw(text, voice).finally(() => { delete ttsPending[k]; });
+  return ttsPending[k];
+}
+// Skapa rösten i bakgrunden när ett recept med sammanfattning visas, så Lyssna startar direkt.
+// Görs bara med Googles röst, och slutar försöka resten av sessionen om rösten inte fungerar med nyckeln.
+function prefetchVoice() {
+  clearTimeout(prefetchVoice._t);
+  prefetchVoice._t = setTimeout(() => {
+    const r = S.current.recipe;
+    if (S.route.view !== 'recipe' || !r || S.ttsFailed || voiceMode() !== 'ai' || S.busy) return;
+    if (!r.spoken || r.spoken.sig !== spokenSig(r)) return;
+    const key = `${aiVoice()}|${strHash(r.spoken.text)}`;
+    if ((S.ttsDone ||= new Set()).has(key)) return;
+    S.ttsDone.add(key);
+    ttsAudio(r.spoken.text, aiVoice()).catch(e => { S.ttsFailed = e.message || String(e); S.ttsDone.delete(key); console.warn('Förhämtning av röst', e); });
+  }, 1200);
+}
+async function ttsAudioRaw(text, voice) {
   const key = ((window.Cloud?.active() && Cloud.geminiKey()) || S.settings.geminiKey || '').trim();
   if (!key) throw new Error(L('ingen Gemini-nyckel', 'no Gemini key'));
   const cacheKey = `tts1|${voice}|${strHash(text)}`;
@@ -1693,7 +1714,7 @@ Svara ENDAST med JSON: {"text": "..."}`);
 // Spelar en text med vald röst. title = receptet som läses (null för provlyssning i inställningarna).
 async function speakText(text, title) {
   const sp = S.speech;
-  if (voiceMode() === 'ai') {
+  if (voiceMode() === 'ai' && !(S.ttsFailed && title)) {
     sp.step = 'voice'; updateSpeechBar();
     try {
       const blob = await ttsAudio(text, aiVoice());
@@ -1705,10 +1726,11 @@ async function speakText(text, title) {
       return;
     } catch (e) {
       if (S.speech !== sp) return;
-      console.warn('AI-röst', e);
+      console.warn('AI-röst', e); S.ttsFailed = e.message || String(e);
       if (!S.ttsWarned) { S.ttsWarned = true; toast(L(`Googles röst gick inte att använda (${e.message}). Läser med enhetens röst.`, `Google's voice could not be used (${e.message}). Using the device voice.`), 6000); }
     }
   }
+  if (S.ttsFailed && !S.ttsWarned && voiceMode() === 'ai') { S.ttsWarned = true; toast(L(`Googles röst gick inte att använda (${S.ttsFailed}). Läser med enhetens röst.`, `Google's voice could not be used (${S.ttsFailed}). Using the device voice.`), 6000); }
   const parts = text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+["”»]?|[^.!?]+$/g)?.map(x => x.trim()).filter(Boolean) || [text];
   Object.assign(sp, { mode: 'device', state: 'playing', idx: 0, total: parts.length, parts, voice: pickVoice() }); updateSpeechBar();
   speakPart();
@@ -2154,7 +2176,7 @@ $('#stage').addEventListener('click', async e => {
   const sv = t.closest('[data-serve]');
   if (sv) { const r = S.current.recipe, x = r.serveWith?.[+sv.dataset.serve]; if (x) send(L(`Ge mig det kompletta receptet på ${x.name} som tillbehör till ${r.title}, för samma antal portioner.`, `Give me the complete recipe for ${x.name} as a side for ${r.title}, for the same number of servings.`), null, { flow: true, newDish: true }); return; }
   if (t.closest('[data-listen]')) { listen(); return; }
-  const vm = t.closest('[data-voicemode]'); if (vm) { S.settings.voice = vm.dataset.voicemode; S.ttsWarned = false; saveSettings(); keepScroll(renderStage); return; }
+  const vm = t.closest('[data-voicemode]'); if (vm) { S.settings.voice = vm.dataset.voicemode; S.ttsWarned = false; S.ttsFailed = null; saveSettings(); keepScroll(renderStage); return; }
   if (t.closest('[data-voicetest]')) { testVoice(); return; }
   if (t.closest('[data-speechpause]')) { toggleSpeechPause(); return; }
   if (t.closest('[data-speechstop]')) { stopSpeech(); return; }
