@@ -1290,22 +1290,21 @@ function viewRecipe() {
   const stepper = `<div class="stepper portions" role="group" aria-label="${L('Portioner', 'Servings')}"><button type="button" data-rport="-1" aria-label="${L('Färre portioner', 'Fewer servings')}">−</button><output>${n} ${L('portioner', 'servings')}</output><button type="button" data-rport="1" aria-label="${L('Fler portioner', 'More servings')}">+</button></div>`;
   return `<article class="recipe">
   <header class="r-head">
-    <button class="icon-btn r-close" data-go="${back}" aria-label="${L('Stäng receptet', 'Close the recipe')}" title="${L('Stäng', 'Close')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
-    ${r.origin || r.countries ? `<div class="r-origin origin">${flags(r)}<span>${esc(r.origin || '')}</span></div>` : ''}
+    <div class="r-corner">
+      <button class="icon-btn r-save${saved ? ' on' : ''}${S.current.dirty ? ' dirty' : ''}" ${!saved || S.current.dirty ? 'data-save' : 'data-jump="r-tips"'} aria-label="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken – visa anteckningar', 'Saved – show notes')}" title="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken', 'Saved in cookbook')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.2-6.5 4.2v-16a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      <button class="icon-btn r-close" data-go="${back}" aria-label="${L('Stäng receptet', 'Close the recipe')}" title="${L('Stäng', 'Close')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="r-origin origin">${r.origin || r.countries ? `${flags(r)}<span>${esc(r.origin || '')}</span>` : ''}</div>
     <h1>${esc(r.title)}</h1>
     <div class="r-meta">
       ${r.source ? `<a class="r-source" href="${esc(r.source)}" target="_blank" rel="noopener">${L('Källa', 'Source')}: ${esc((() => { try { return new URL(r.source).hostname.replace(/^www\./, ''); } catch { return L('länk', 'link'); } })())}</a>` : ''}
       ${r.tag ? `<span class="tag ${isHelg ? 'helg' : 'vardag'}">${isHelg ? L('Helg', 'Weekend') : L('Vardag', 'Weekday')}</span>` : ''}
       ${r.time ? `<span>${esc(r.time)}</span>` : ''}
-      ${saved?.rating ? `<span style="color:var(--kunyit)">${'★'.repeat(saved.rating)}</span>` : ''}
-      <span class="r-actions">
-        ${'speechSynthesis' in window || 'Audio' in window ? `<button class="ghost small" data-listen aria-pressed="${!!S.speech}">🔊 ${L('Lyssna', 'Listen')}</button>` : ''}
-        ${!saved ? `<button class="btn small" data-save>${L('Spara i kokboken', 'Save to cookbook')}</button>`
-          : S.current.dirty ? `<button class="btn small" data-save>${L('Spara ändringarna', 'Save changes')}</button>`
-          : `<button class="ghost small" data-cooked>${L('Vi lagade den idag', 'We cooked it today')}</button>`}
-      </span>
+      ${saved?.rating ? `<span class="r-stars" aria-label="${L(`${saved.rating} av 5`, `${saved.rating} of 5`)}">${'★'.repeat(saved.rating)}</span>` : ''}
+      ${saved && !S.current.dirty ? `<span class="r-saved">${L('I kokboken', 'In cookbook')}</span>` : ''}
     </div>
-    <div id="speechBar" class="speech-bar" ${S.speech ? '' : 'hidden'}>${speechBarHtml()}</div>
+    ${saved && S.current.dirty ? `<p class="r-dirty">${L('Receptet är ändrat sedan du sparade.', 'The recipe has changed since you saved it.')} <button class="linkish" data-save>${L('Spara ändringarna', 'Save changes')}</button></p>` : ''}
+    ${'speechSynthesis' in window || 'Audio' in window ? `<div class="listen${S.speech && S.speech.title ? ' active' : ''}" id="listenCard">${listenCardHtml()}</div>` : ''}
     ${r.intro ? `<p class="r-intro">${esc(r.intro)}</p>` : ''}
     ${recipeTop(r)}
   </header>
@@ -1664,7 +1663,23 @@ function speechBarHtml() {
     ${sp.state !== 'loading' ? `<button class="ghost small" data-speechpause>${sp.state === 'paused' ? L('▶ Fortsätt', '▶ Resume') : L('⏸ Paus', '⏸ Pause')}</button>` : ''}
     <button class="ghost small" data-speechstop>${L('■ Stopp', '■ Stop')}</button>`;
 }
-function updateSpeechBar() { const el = $('#speechBar'); if (!el) return; el.hidden = !S.speech; el.innerHTML = speechBarHtml(); const b = $('[data-listen]'); if (b) b.setAttribute('aria-pressed', String(!!S.speech)); }
+const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5Z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>';
+function listenCardHtml() {
+  const sp = S.speech && S.speech.title ? S.speech : null;
+  if (!sp) return `<button type="button" class="listen-idle" data-listen><span class="listen-btn">${ICON_PLAY}</span>
+    <span class="listen-txt"><strong>${L('Lyssna på receptet', 'Listen to the recipe')}</strong><span>${L('Kort sammanfattning, ungefär en minut', 'Short summary, about a minute')}</span></span></button>`;
+  const pct = sp.mode === 'ai' && sp.dur ? Math.min(100, (sp.pos || 0) / sp.dur * 100) : sp.total ? (sp.idx / sp.total) * 100 : 0;
+  const status = sp.state === 'loading' ? (sp.step === 'voice' ? L('Förbereder rösten…', 'Preparing the voice…') : L('Souschefen skriver sammanfattningen…', 'The sous-chef is writing the summary…'))
+    : sp.state === 'paused' ? L('Pausad', 'Paused') : L('Läser upp', 'Reading aloud');
+  const time = sp.mode === 'ai' && sp.dur ? `${mmss(sp.pos || 0)} / ${mmss(sp.dur)}` : '';
+  return `<button type="button" class="listen-btn" ${sp.state === 'loading' ? 'disabled aria-busy="true"' : 'data-speechpause'} aria-label="${sp.state === 'playing' ? L('Pausa', 'Pause') : L('Spela', 'Play')}">${sp.state === 'loading' ? '<span class="listen-spin" aria-hidden="true"></span>' : sp.state === 'playing' ? ICON_PAUSE : ICON_PLAY}</button>
+    <span class="listen-txt" aria-live="polite"><strong>${status}</strong><span class="listen-prog" aria-hidden="true"><i style="width:${pct.toFixed(1)}%"></i></span>${time ? `<span class="listen-time">${time}</span>` : ''}</span>
+    <button type="button" class="icon-btn listen-stop" data-speechstop aria-label="${L('Stoppa uppläsningen', 'Stop reading')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>`;
+}
+function updateSpeechBar() {
+  const card = $('#listenCard');
+  if (card) { card.innerHTML = listenCardHtml(); card.classList.toggle('active', !!(S.speech && S.speech.title)); } const el = $('#speechBar'); if (!el) return; el.hidden = !S.speech; el.innerHTML = speechBarHtml(); const b = $('[data-listen]'); if (b) b.setAttribute('aria-pressed', String(!!S.speech)); }
 // Enhetens röst: bästa svenska (eller engelska) rösten – Premium/Förbättrad före kompakta
 function deviceVoices() { const want = L('sv', 'en'); try { return speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith(want)); } catch { return []; } }
 function pickVoice() {
@@ -1777,7 +1792,7 @@ if ('speechSynthesis' in window) { try { speechSynthesis.getVoices(); speechSynt
 const fmtMin = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`;
 function notesBox(saved) {
   return `<div class="notes-box">
-    <h3>${L(`Våra anteckningar`, `Our notes`)}</h3>
+    <div class="notes-head"><h3>${L(`Våra anteckningar`, `Our notes`)}</h3><button class="ghost small" data-cooked>✓ ${L('Vi lagade den idag', 'We cooked it today')}</button></div>
     <div class="row" style="margin-bottom:8px"><span class="muted">${L('Betyg', 'Rating')}</span><span class="stars" role="radiogroup" aria-label="${L('Betyg', 'Rating')}">${[1, 2, 3, 4, 5].map(n => `<button role="radio" aria-checked="${saved.rating === n}" aria-label="${L(`${n} av 5`, `${n} of 5`)}" class="${saved.rating >= n ? 'on' : ''}" data-rate="${n}">★</button>`).join('')}</span></div>
     <textarea id="notes" placeholder="${L('Vad blev bra, vad gör vi annorlunda nästa gång? Souschefen läser det här.', 'What went well, what would you change next time? The sous-chef reads this.')}">${esc(saved.notes || '')}</textarea>
     ${saved.cooked?.length ? `<div class="cooked-log">${L(`Lagad ${saved.cooked.length} ${saved.cooked.length === 1 ? 'gång' : 'gånger'}, senast`, `Cooked ${saved.cooked.length} ${saved.cooked.length === 1 ? 'time' : 'times'}, last on`)} ${new Date(saved.cooked[saved.cooked.length - 1]).toLocaleDateString(LOCALE())}</div>` : ''}

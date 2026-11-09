@@ -804,3 +804,43 @@ a.howto { text-decoration: none; color: var(--ink); }
 .status-btn .tiny { display: none; }
 @media (max-width: 380px) { .status-btn .short { display: none !important; } .status-btn .tiny { display: inline; } }
 .set-row a.ghost { color: var(--ink); text-decoration: none; }
+
+/* ============ Receptets huvud: bokmärke + lyssna-kort (nov 2026) ============ */
+.r-head { padding-right: 0; }
+.r-head .r-origin { min-height: 40px; display: flex; align-items: center; gap: 6px; padding-right: 96px; margin-bottom: 2px; }
+.r-corner { position: absolute; top: -4px; right: -8px; display: flex; gap: 2px; }
+.r-corner .r-close { position: static; }
+.r-save svg { width: 22px; height: 22px; fill: none; }
+.r-save.on { color: var(--pandan); }
+.r-save.on svg { fill: currentColor; }
+.r-save.dirty { position: relative; }
+.r-save.dirty::after { content: ""; position: absolute; top: 9px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: var(--kunyit); box-shadow: 0 0 0 2px var(--bg); }
+.r-stars { color: var(--kunyit); letter-spacing: 1px; }
+.r-saved { display: inline-flex; align-items: center; gap: 5px; color: var(--pandan); font-weight: 700; font-size: 14px; }
+.r-saved::before { content: ""; width: 9px; height: 12px; background: currentColor; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); }
+.r-dirty { margin: 10px 0 0; font-size: 15px; color: var(--muted); }
+.r-dirty .linkish { font-weight: 700; }
+
+.listen { margin: 16px 0 0; max-width: 460px; }
+.listen-idle { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 18px 6px 6px; cursor: pointer; color: var(--ink); }
+.listen-idle:hover { border-color: var(--pandan); }
+.listen-idle:focus-visible, .listen-btn:focus-visible { outline: 2px solid var(--pandan); outline-offset: 2px; }
+.listen-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--pandan); color: var(--pandan-ink); display: grid; place-items: center; cursor: pointer; }
+.listen-btn svg { width: 20px; height: 20px; }
+.listen-btn[disabled] { cursor: default; opacity: 1; }
+.listen-txt { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.listen-txt strong { font-size: 15.5px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.listen-txt > span:not(.listen-prog):not(.listen-time) { font-size: 13.5px; color: var(--muted); }
+.listen.active { display: flex; align-items: center; gap: 12px; border: 1px solid var(--pandan); background: var(--pandan-soft); border-radius: 999px; padding: 6px 6px 6px 6px; }
+.listen.active .listen-txt { grid-template-columns: 1fr auto; column-gap: 10px; align-items: center; }
+.listen.active .listen-txt strong { grid-column: 1 / -1; }
+.listen-prog { display: block; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--pandan) 22%, transparent); overflow: hidden; margin-top: 5px; }
+.listen-prog i { display: block; height: 100%; background: var(--pandan); border-radius: 2px; transition: width .5s linear; }
+.listen-time { font-size: 12.5px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.listen-stop { flex: none; }
+.listen-spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid color-mix(in srgb, var(--pandan-ink) 35%, transparent); border-top-color: var(--pandan-ink); animation: lspin .8s linear infinite; }
+@keyframes lspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .listen-spin { animation-duration: 2s; } .listen-prog i { transition: none; } }
+.stage.split .listen { margin-top: 8px; }
+.notes-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.notes-head h3 { margin: 0; }
