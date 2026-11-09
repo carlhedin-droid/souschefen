@@ -61,7 +61,7 @@ function setLang(lang) {
   applyStaticLang(); renderStatus(); renderStage(); renderChat(); renderAttach(); tickTimers();
   const el = $('#sync'); if (el) el.textContent = tv(S.sync.state || '');
 }
-const ENGLISH_RULE = `- LANGUAGE: The app is set to English. Keep "howTo" search terms in English. Write everything the user sees in natural English: "reply", all recipe and suggestion text (title, origin, intro, step titles, overview, activeTime, ahead, ingredient names, groups and swaps, steps, health, tips, troubleshoot, serveWith, storage, drinks (why, priceTip, option title, lookFor and why, nonAlcoholic title and why; keep kind, taste, food, grape, country and region values exactly as specified – taste slugs, grape and country names stay Swedish/as on Systembolaget), why, keyIngredients, equipment) and "learn". This overrides the Swedish examples above, and the instructions being in Swedish does not change it. Use g, kg, ml, l, tbsp and tsp, and "Easy", "Medium" or "Advanced" for "difficulty". Keep "tag" exactly VARDAG or HELG (VARDAG means weekday, HELG means weekend). Family notes may be in Swedish; understand them and answer in English. If a recipe on screen or at a link is in Swedish or another language, translate it when you send it. If information is missing: ask in "reply" and set suggestions/recipe to null.`;
+const ENGLISH_RULE = `- LANGUAGE: The app is set to English. Keep "howTo" search terms in English. Write everything the user sees in natural English: "reply", all recipe and suggestion text (title, origin, intro, step titles, spoken, overview, activeTime, ahead, ingredient names, groups and swaps, steps, health, tips, troubleshoot, serveWith, storage, drinks (why, priceTip, option title, lookFor and why, nonAlcoholic title and why; keep kind, taste, food, grape, country and region values exactly as specified – taste slugs, grape and country names stay Swedish/as on Systembolaget), why, keyIngredients, equipment) and "learn". This overrides the Swedish examples above, and the instructions being in Swedish does not change it. Use g, kg, ml, l, tbsp and tsp, and "Easy", "Medium" or "Advanced" for "difficulty". Keep "tag" exactly VARDAG or HELG (VARDAG means weekday, HELG means weekend). Family notes may be in Swedish; understand them and answer in English. If a recipe on screen or at a link is in Swedish or another language, translate it when you send it. If information is missing: ask in "reply" and set suggestions/recipe to null.`;
 const langRule = () => FORMAT_RULES.replace('- Svara på svenska. Om info saknas: ställ motfrågan i "reply" och sätt suggestions/recipe till null.', L('- Svara på svenska. Om info saknas: ställ motfrågan i "reply" och sätt suggestions/recipe till null.', ENGLISH_RULE));
 
 /* ============ Standardtexter ============ */
@@ -311,7 +311,7 @@ const RESPONSE_SCHEMA = {
         swaps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, amount: S_STRN, why: S_STR }, required: ['name', 'why'] } } }, required: ['id', 'amount', 'name'] } },
       steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' }, howTo: S_STRN }, required: ['title', 'text'] } },
       health: { type: 'OBJECT', nullable: true, properties: { summary: S_STR, tips: S_ARR } },
-      tips: S_ARR,
+      tips: S_ARR, spoken: S_STRN,
       troubleshoot: { type: 'ARRAY', items: { type: 'OBJECT', properties: { problem: S_STR, fix: S_STR }, required: ['problem', 'fix'] } },
       serveWith: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, why: S_STRN }, required: ['name'] } },
       storage: { type: 'OBJECT', nullable: true, properties: { fridge: S_STRN, freezer: S_STRN, leftovers: S_STRN } },
@@ -342,6 +342,7 @@ Du svarar inuti en app. Svara ALLTID med exakt ett JSON-objekt – ingen text f�
     "steps": [ { "title": "Bryn kycklingen", "text": "Bryn 300 g kycklinglårfilé ...", "uses": ["i1"], "minutes": 8 | null, "optional": false, "howTo": "how to sear chicken thighs" | null } ],
     "health": { "summary": "≈45 g protein och 650 kcal per portion. …", "tips": ["konkret byte för den som vill äta lättare"] },
     "tips": [""],
+    "spoken": "Det här är en krämig butter chicken som tar ungefär en timme…",
     "troubleshoot": [ { "problem": "Såsen är för tunn", "fix": "Sjud utan lock 5–10 min." } ],
     "serveWith": [ { "name": "Gurkraita", "why": "svalkar hettan" } ],
     "storage": { "fridge": "3 dagar", "freezer": "3 månader, utan grädden" | null, "leftovers": "Fyll wraps med resterna" | null },
@@ -377,6 +378,7 @@ Regler:
       - "lookFor": druvor eller områden och smakklockor (fyllighet, strävhet, fruktsyra, sötma, skala 1–12).
     - "priceTip": var det finns mest för pengarna i vår prisklass.
     - "nonAlcoholic": om inställningen säger det; "kind" är alkoholfritt-rott, alkoholfritt-vitt, alkoholfritt-mousserande, alkoholfri-ol eller annat (hemgjort).
+  - "spoken": en talad sammanfattning för uppläsning, 110–170 ord: vad rätten är och ungefär hur lång tid det tar, huvudingredienserna i stora drag (inga mängder), hur det går till i 3–4 moment, det som måste göras i förväg, och 1–2 viktiga tips. Skriv som en vänlig kock pratar: korta meningar, inga listor, parenteser eller förkortningar ("matskedar", "grader", "minuter"). Skriv en ny när receptet ändras.
   - "storage": hållbarhet i kyl, om den går att frysa (och hur), och en idé för resterna. null om det inte är relevant (t.ex. en dryck).
 - Varje steg har "title": 2–4 ord i imperativ som namnger momentet, t.ex. "Förbered grönsakerna", "Montera lasagnen", "Grädda i ugnen". Upprepa inte rubriken i "text". Även vid renskrivning.
 - I varje steg: skriv ut mängderna i texten och lista ingrediensernas id i "uses". "minutes" anges för steg med vänte-/tillagningstid.
@@ -953,6 +955,8 @@ function recipeDiff(a, b) {
   return out;
 }
 const CLAIM_RE = /(i(?:'ve| have) (?:updated|changed|adjusted|replaced|added|removed)|has been (?:updated|changed|adjusted)|here is the (?:new|updated|revised)|uppdaterat|uppdaterade|uppdaterats|uppdaterar|ändrat|ändrade|ändrats|justerat|justerade|justerats|har bytt|bytt ut|bytts ut|lagt till|lagts till|tagit bort|tagits bort|här är (det|ditt|ert) (nya|ändrade|reviderade))/i;
+// Signatur för Lyssna-sammanfattningen: ändras receptet skrivs en ny
+const spokenSig = r => [L('sv', 'en'), r.title, r.steps.length, r.steps.map(x => x.text).join('').length, r.ingredients.length].join('|');
 function normalizeRecipe(r) {
   if (!r || !Array.isArray(r.ingredients) || !Array.isArray(r.steps)) return null;
   const arr = x => Array.isArray(x) ? x : [];
@@ -963,6 +967,8 @@ function normalizeRecipe(r) {
   r.steps = r.steps.map(s => typeof s === 'string' ? { text: s, uses: [], minutes: null } :
     { title: str(s.title), text: s.text || '', uses: Array.isArray(s.uses) ? s.uses.map(String) : [], minutes: Number(s.minutes) > 0 ? Number(s.minutes) : null, optional: s.optional === true, howTo: str(s.howTo) });
   r.overview = arr(r.overview).map(str).filter(Boolean).slice(0, 4);
+  r.spoken = typeof r.spoken === 'string' && r.spoken.trim() ? { text: r.spoken.trim(), sig: spokenSig(r) }  // ny från souschefen
+    : r.spoken && typeof r.spoken.text === 'string' && r.spoken.text.trim() ? { text: r.spoken.text, sig: String(r.spoken.sig || '') } : null;
   r.activeTime = str(r.activeTime); r.ahead = str(r.ahead);
   r.troubleshoot = arr(r.troubleshoot).filter(t => t && str(t.problem) && str(t.fix)).slice(0, 4).map(t => ({ problem: str(t.problem), fix: str(t.fix) }));
   r.serveWith = arr(r.serveWith).filter(t => t && str(t.name)).slice(0, 4).map(t => ({ name: str(t.name), why: str(t.why) }));
@@ -1292,11 +1298,13 @@ function viewRecipe() {
       ${r.time ? `<span>${esc(r.time)}</span>` : ''}
       ${saved?.rating ? `<span style="color:var(--kunyit)">${'★'.repeat(saved.rating)}</span>` : ''}
       <span class="r-actions">
+        ${'speechSynthesis' in window ? `<button class="ghost small" data-listen aria-pressed="${!!S.speech}">🔊 ${L('Lyssna', 'Listen')}</button>` : ''}
         ${!saved ? `<button class="btn small" data-save>${L('Spara i kokboken', 'Save to cookbook')}</button>`
           : S.current.dirty ? `<button class="btn small" data-save>${L('Spara ändringarna', 'Save changes')}</button>`
           : `<button class="ghost small" data-cooked>${L('Vi lagade den idag', 'We cooked it today')}</button>`}
       </span>
     </div>
+    <div id="speechBar" class="speech-bar" ${S.speech ? '' : 'hidden'}>${speechBarHtml()}</div>
     ${r.intro ? `<p class="r-intro">${esc(r.intro)}</p>` : ''}
     ${recipeTop(r)}
   </header>
@@ -1548,6 +1556,74 @@ async function addToShop() {
     toast(L(`${rows.length} ${rows.length === 1 ? 'vara' : 'varor'} i ${ln}${merged ? ` (${merged} ihopslagna)` : ''}`, `${rows.length} ${rows.length === 1 ? 'item' : 'items'} added to ${ln}${merged ? ` (${merged} merged)` : ''}`), 3500);
   } catch (e) { sh.busy = false; sh.err = L('Kunde inte lägga till: ', 'Could not add: ') + (e.message || e); keepScroll(renderStage); }
 }
+/* ============ Lyssna: en talad sammanfattning med enhetens röst ============ */
+// Sammanfattningen skrivs av souschefen en gång och sparas med receptet (r.spoken), så nästa gång startar den direkt.
+function speechBarHtml() {
+  const sp = S.speech; if (!sp) return '';
+  const label = sp.state === 'loading' ? L('Souschefen skriver sammanfattningen…', 'The sous-chef is writing the summary…') : sp.state === 'paused' ? L('Pausad', 'Paused') : L('Läser upp', 'Reading aloud');
+  return `<span class="sb-label">${sp.state === 'playing' ? '<span class="sb-wave" aria-hidden="true"><i></i><i></i><i></i></span>' : ''}${label}${sp.total ? ` <span class="muted">${sp.idx + 1}/${sp.total}</span>` : ''}</span>
+    ${sp.state !== 'loading' ? `<button class="ghost small" data-speechpause>${sp.state === 'paused' ? L('▶ Fortsätt', '▶ Resume') : L('⏸ Paus', '⏸ Pause')}</button>` : ''}
+    <button class="ghost small" data-speechstop>${L('■ Stopp', '■ Stop')}</button>`;
+}
+function updateSpeechBar() { const el = $('#speechBar'); if (!el) return; el.hidden = !S.speech; el.innerHTML = speechBarHtml(); const b = $('[data-listen]'); if (b) b.setAttribute('aria-pressed', String(!!S.speech)); }
+function pickVoice() {
+  const want = L('sv', 'en'), voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith(want));
+  const pref = L(/alva|klara|oskar|google|premium|enhanced|förbättrad/i, /google uk|serena|daniel|premium|enhanced|google us/i);
+  return voices.find(v => pref.test(v.name) && v.localService !== false) || voices.find(v => pref.test(v.name)) || voices[0] || null;
+}
+function stopSpeech() { S.speech = null; try { speechSynthesis.cancel(); } catch { } updateSpeechBar(); }
+async function listen() {
+  const r = S.current.recipe; if (!r) return;
+  if (S.speech) { stopSpeech(); return; }
+  S.speech = { state: 'loading', idx: 0, total: 0, title: r.title }; updateSpeechBar();
+  try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { }  // låser upp ljudet i iOS medan texten skrivs
+  let text = r.spoken && r.spoken.sig === spokenSig(r) ? r.spoken.text : '';
+  if (!text) {
+    try {
+      const f = portionsFor(r) / (r.servings || 4);
+      const brief = { title: r.title, intro: r.intro, time: r.time, activeTime: r.activeTime, ahead: r.ahead, overview: r.overview, servings: portionsFor(r),
+        ingredients: r.ingredients.map(i => i.name), steps: r.steps.map(x => (x.title ? x.title + ': ' : '') + scaleStepText(x.text, f)), tips: r.tips, troubleshoot: (r.troubleshoot || []).slice(0, 2) };
+      const o = await geminiJSON(`Skriv en talad sammanfattning av receptet nedan, för uppläsning med en röst. Lyssnaren ska få en helhetsbild utan att läsa receptet.
+Längd: 110–170 ord, ungefär en minut.
+Innehåll i den här ordningen: vad rätten är och ungefär hur lång tid det tar; huvudingredienserna i stora drag (inga mängder, inte varje krydda); hur det går till i 3–4 moment; det som måste göras i förväg eller tar tid; avsluta med 1–2 viktiga tips.
+Stil: som en vänlig kock som pratar. Korta meningar. Inga listor, rubriker, parenteser, emojis eller förkortningar – skriv "matskedar", "grader", "minuter". Tal i siffror går bra.
+Språk: ${L('svenska', 'English')}.
+Recept: ${JSON.stringify(brief)}
+Svara ENDAST med JSON: {"text": "..."}`);
+      text = String(o.text || '').trim();
+      if (!text) throw new Error(L('Souschefen gav ingen sammanfattning.', 'The sous-chef returned no summary.'));
+      if (S.current.recipe === r) {
+        r.spoken = { text, sig: spokenSig(r) };
+        const sv = S.current.recipeSavedId && S.data.recipes.find(x => x.id === S.current.recipeSavedId);
+        if (sv) { sv.spoken = r.spoken; touch(sv); saveData(); }
+        saveCurrent();
+      }
+    } catch (e) { stopSpeech(); toast(e.message || String(e), 4500); return; }
+  }
+  if (!S.speech || S.speech.title !== r.title) return;   // stoppad eller nytt recept under tiden
+  // Läs mening för mening – långa yttranden klipps av i vissa webbläsare (iOS)
+  const parts = text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+["”»]?|[^.!?]+$/g)?.map(x => x.trim()).filter(Boolean) || [text];
+  const voice = pickVoice();
+  Object.assign(S.speech, { state: 'playing', idx: 0, total: parts.length, parts, voice }); updateSpeechBar();
+  speakPart();
+}
+function speakPart() {
+  const sp = S.speech; if (!sp || sp.state !== 'playing') return;
+  if (sp.idx >= sp.parts.length || S.route.view !== 'recipe' || S.current.recipe?.title !== sp.title) { stopSpeech(); return; }
+  const u = new SpeechSynthesisUtterance(sp.parts[sp.idx]);
+  u.lang = L('sv-SE', 'en-GB'); if (sp.voice) u.voice = sp.voice; u.rate = 1;
+  u.onend = () => { if (S.speech !== sp || sp.state !== 'playing') return; sp.idx++; updateSpeechBar(); speakPart(); };
+  u.onerror = e => { if (e.error === 'interrupted' || e.error === 'canceled') return; stopSpeech(); toast(L('Uppläsningen avbröts.', 'Reading was interrupted.')); };
+  speechSynthesis.speak(u);
+}
+// Paus: avbryt aktuell mening och börja om på den vid Fortsätt (pause()/resume() är opålitligt i flera webbläsare)
+function toggleSpeechPause() {
+  const sp = S.speech; if (!sp || sp.state === 'loading') return;
+  if (sp.state === 'playing') { sp.state = 'paused'; speechSynthesis.cancel(); }
+  else { sp.state = 'playing'; speakPart(); }
+  updateSpeechBar();
+}
+if ('speechSynthesis' in window) { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => {}; } catch { } }
 const fmtMin = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`;
 function notesBox(saved) {
   return `<div class="notes-box">
@@ -1946,6 +2022,9 @@ $('#stage').addEventListener('click', async e => {
   if (t.closest('[data-hideopt]')) { S.hideOptional = !S.hideOptional; keepScroll(renderStage); return; }
   const sv = t.closest('[data-serve]');
   if (sv) { const r = S.current.recipe, x = r.serveWith?.[+sv.dataset.serve]; if (x) send(L(`Ge mig det kompletta receptet på ${x.name} som tillbehör till ${r.title}, för samma antal portioner.`, `Give me the complete recipe for ${x.name} as a side for ${r.title}, for the same number of servings.`), null, { flow: true, newDish: true }); return; }
+  if (t.closest('[data-listen]')) { listen(); return; }
+  if (t.closest('[data-speechpause]')) { toggleSpeechPause(); return; }
+  if (t.closest('[data-speechstop]')) { stopSpeech(); return; }
   if (t.closest('[data-shopopen]')) { openShop(); return; }
   if (t.closest('[data-shopclose]')) { S.shop = null; keepScroll(renderStage); return; }
   const shl = t.closest('[data-shoplist]'); if (shl) { const was = shopIsGrocery(S.shop); S.shop.listId = shl.dataset.shoplist; const now = shopIsGrocery(S.shop);
@@ -2126,12 +2205,12 @@ function prefsChanged(quiet) {
 function statusLabel() {
   const d = dayInfo(), P = S.data.prefs, t = todayTime();
   const day = d.weekend ? L('Helg', 'Weekend') : L('Vardag', 'Weekday');
-  return { short: `${day} · ${t.label}`, long: `${day}${d.manual ? '' : ' (auto)'} · ${t.label} · ${P.portions} ${L('port', 'serv')}` };
+  return { short: `${day} · ${t.label}`, tiny: t.label, day, long: `${day}${d.manual ? '' : ' (auto)'} · ${t.label} · ${P.portions} ${L('port', 'serv')}` };
 }
 function renderStatus() {
   const b = $('#statusBtn'); if (!b) return;
   const l = statusLabel();
-  b.innerHTML = `<span class="long">${esc(l.long)}</span><span class="short">${esc(l.short)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`;
+  b.innerHTML = `<span class="long">${esc(l.long)}</span><span class="short">${esc(l.short)}</span><span class="tiny">${esc(l.tiny)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`;
   const pop = $('#statusPop');
   if (!pop.hidden) pop.innerHTML = statusPopHtml();
 }
