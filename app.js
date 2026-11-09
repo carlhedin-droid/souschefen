@@ -1298,7 +1298,7 @@ function viewRecipe() {
       ${r.time ? `<span>${esc(r.time)}</span>` : ''}
       ${saved?.rating ? `<span style="color:var(--kunyit)">${'★'.repeat(saved.rating)}</span>` : ''}
       <span class="r-actions">
-        ${'speechSynthesis' in window ? `<button class="ghost small" data-listen aria-pressed="${!!S.speech}">🔊 ${L('Lyssna', 'Listen')}</button>` : ''}
+        ${'speechSynthesis' in window || 'Audio' in window ? `<button class="ghost small" data-listen aria-pressed="${!!S.speech}">🔊 ${L('Lyssna', 'Listen')}</button>` : ''}
         ${!saved ? `<button class="btn small" data-save>${L('Spara i kokboken', 'Save to cookbook')}</button>`
           : S.current.dirty ? `<button class="btn small" data-save>${L('Spara ändringarna', 'Save changes')}</button>`
           : `<button class="ghost small" data-cooked>${L('Vi lagade den idag', 'We cooked it today')}</button>`}
@@ -1556,74 +1556,202 @@ async function addToShop() {
     toast(L(`${rows.length} ${rows.length === 1 ? 'vara' : 'varor'} i ${ln}${merged ? ` (${merged} ihopslagna)` : ''}`, `${rows.length} ${rows.length === 1 ? 'item' : 'items'} added to ${ln}${merged ? ` (${merged} merged)` : ''}`), 3500);
   } catch (e) { sh.busy = false; sh.err = L('Kunde inte lägga till: ', 'Could not add: ') + (e.message || e); keepScroll(renderStage); }
 }
-/* ============ Lyssna: en talad sammanfattning med enhetens röst ============ */
-// Sammanfattningen skrivs av souschefen en gång och sparas med receptet (r.spoken), så nästa gång startar den direkt.
+/* ============ Lyssna: talad sammanfattning ============ */
+// Text: souschefen skriver den i receptet (r.spoken) eller när man trycker. Röst: Googles AI-röst (Gemini TTS) som standard,
+// med enhetens röst som reserv. Ljudet sparas per enhet i IndexedDB så samma sammanfattning inte genereras två gånger.
+const TTS_VOICES = [['Sulafat', 'Varm'], ['Achird', 'Vänlig'], ['Vindemiatrix', 'Mjuk'], ['Kore', 'Tydlig'], ['Charon', 'Informativ'], ['Puck', 'Glad']];
+const EN_VOICE_DESC = { Varm: 'Warm', Vänlig: 'Friendly', Mjuk: 'Gentle', Tydlig: 'Firm', Informativ: 'Informative', Glad: 'Upbeat' };
+const voiceMode = () => S.settings.voice === 'device' || S.settings.provider === 'claude' || !('Audio' in window) ? 'device' : 'ai';
+const aiVoice = () => TTS_VOICES.some(v => v[0] === S.settings.aiVoice) ? S.settings.aiVoice : TTS_VOICES[0][0];
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+const audioDB = (() => {
+  let p;
+  const open = () => p || (p = new Promise((ok, bad) => { const r = indexedDB.open('souschefen', 1); r.onupgradeneeded = () => r.result.createObjectStore('audio'); r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error); }));
+  return {
+    get: async k => { try { const db = await open(); return await new Promise(ok => { const q = db.transaction('audio').objectStore('audio').get(k); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); }); } catch { return null; } },
+    set: async (k, v) => { try { const db = await open(); db.transaction('audio', 'readwrite').objectStore('audio').put(v, k); } catch { /* privat läge */ } },
+  };
+})();
+const strHash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+function pcmToWav(pcm, rate = 24000) {
+  const h = new DataView(new ArrayBuffer(44)), w = (o, s) => [...s].forEach((c, i) => h.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); h.setUint32(4, 36 + pcm.length, true); w(8, 'WAVE'); w(12, 'fmt '); h.setUint32(16, 16, true); h.setUint16(20, 1, true); h.setUint16(22, 1, true);
+  h.setUint32(24, rate, true); h.setUint32(28, rate * 2, true); h.setUint16(32, 2, true); h.setUint16(34, 16, true); w(36, 'data'); h.setUint32(40, pcm.length, true);
+  return new Blob([h.buffer, pcm], { type: 'audio/wav' });
+}
+const b64bytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
+function audioFrom(data, mime) {
+  const bytes = b64bytes(data), m = String(mime || '').toLowerCase();
+  if (/wav|riff/.test(m) || (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46)) return new Blob([bytes], { type: 'audio/wav' });
+  if (/mpeg|mp3|ogg|opus|aac|mp4/.test(m)) return new Blob([bytes], { type: m.split(';')[0] });
+  return pcmToWav(bytes, +(m.match(/rate=(\d+)/) || [])[1] || 24000);   // audio/l16 eller pcm
+}
+// Gemini TTS: Interactions-API:t (gemini-3.8-flash-tts, stöder svenska); äldre generateContent-formatet som reserv
+async function ttsAudio(text, voice) {
+  const key = ((window.Cloud?.active() && Cloud.geminiKey()) || S.settings.geminiKey || '').trim();
+  if (!key) throw new Error(L('ingen Gemini-nyckel', 'no Gemini key'));
+  const cacheKey = `tts1|${voice}|${strHash(text)}`;
+  const cached = await audioDB.get(cacheKey); if (cached) return cached;
+  const base = 'https://generativelanguage.googleapis.com/v1beta/', hdr = { 'Content-Type': 'application/json', 'x-goog-api-key': key };
+  const tries = [
+    () => fetch(base + 'interactions', { method: 'POST', headers: hdr, body: JSON.stringify({ model: 'gemini-3.8-flash-tts', input: [{ type: 'user_input', content: [{ type: 'text', text }] }], response_format: { type: 'audio' }, generation_config: { speech_config: [{ voice }] } }) }),
+    () => fetch(base + 'models/gemini-3.1-flash-tts-preview:generateContent', { method: 'POST', headers: hdr, body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } }) }),
+  ];
+  let lastErr = '';
+  for (const t of tries) {
+    let res; try { res = await t(); } catch { throw new Error(L('kunde inte nå Google', 'could not reach Google')); }
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({})), msg = j.error?.message || String(res.status);
+      console.warn('TTS', res.status, msg);
+      lastErr = res.status === 429 ? L('gratiskvoten för röst är slut eller ingår inte i er nyckel', 'the free voice quota is used up or not included in your key') : /billing|paid|free tier/i.test(msg) ? L('rösten kräver betalkonto hos Google', 'the voice requires a paid Google account') : msg;
+      if (/api key/i.test(msg)) break;
+      continue;
+    }
+    const j = await res.json();
+    // Leta upp ljuddatan oavsett svarsformat (steps[].content[].data eller candidates[].content.parts[].inlineData)
+    let found = null;
+    const walk = o => { if (found || !o || typeof o !== 'object') return; const d = o.inlineData || o.inline_data; if (d?.data) { found = { data: d.data, mime: d.mimeType || d.mime_type }; return; }
+      if (typeof o.data === 'string' && o.data.length > 200) { found = { data: o.data, mime: o.mime_type || o.mimeType || o.type }; return; } Object.values(o).forEach(walk); };
+    walk(j);
+    if (!found) { lastErr = L('svaret innehöll inget ljud', 'the answer contained no audio'); continue; }
+    const blob = audioFrom(found.data, found.mime);
+    audioDB.set(cacheKey, blob);
+    return blob;
+  }
+  throw new Error(lastErr || L('okänt fel', 'unknown error'));
+}
+function voiceSettings() {
+  const mode = voiceMode(), vs = deviceVoices();
+  return `<p class="hint ss-lead">${L('Rösten som läser upp receptets sammanfattning när du trycker på Lyssna. Gäller den här enheten.', 'The voice that reads the recipe summary when you tap Listen. Applies to this device.')}</p>
+    <div class="field"><label>${L('Röst', 'Voice')}</label><div class="seg" role="group">
+      <button type="button" data-voicemode="ai" aria-pressed="${mode === 'ai'}" ${S.settings.provider === 'claude' ? 'disabled' : ''}>${L('Googles AI-röst', 'Google AI voice')}</button>
+      <button type="button" data-voicemode="device" aria-pressed="${mode === 'device'}">${L('Enhetens röst', 'Device voice')}</button></div>
+      <span class="hint">${mode === 'ai' ? L('Naturlig röst från Gemini. Fungerar den inte med er nyckel används enhetens röst.', 'Natural voice from Gemini. If it does not work with your key, the device voice is used.') : L('Gratis och fungerar utan nät. På iPhone låter den bäst om du laddar ner en förbättrad svensk röst: Inställningar → Hjälpmedel → Uppläst innehåll → Röster → Svenska.', 'Free and works offline. On iPhone it sounds best if you download an enhanced voice: Settings → Accessibility → Spoken Content → Voices.')}</span></div>
+    ${mode === 'ai' ? `<div class="field"><label for="aiVoice">${L('Googles röst', 'Google voice')}</label><select id="aiVoice" data-setsel="aiVoice">${TTS_VOICES.map(([k, d]) => `<option value="${k}"${aiVoice() === k ? ' selected' : ''}>${k} – ${L(d, EN_VOICE_DESC[d])}</option>`).join('')}</select></div>`
+      : `<div class="field"><label for="deviceVoice">${L('Enhetens röst', 'Device voice')}</label><select id="deviceVoice" data-setsel="deviceVoice"><option value="">${L('Automatiskt – bästa tillgängliga', 'Automatic – best available')}</option>${vs.map(v => `<option value="${esc(v.name)}"${S.settings.deviceVoice === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>
+        ${!vs.length ? `<span class="hint">${L('Inga röster hittades för språket på den här enheten.', 'No voices found for the language on this device.')}</span>` : ''}</div>`}
+    <button class="ghost" data-voicetest>▶ ${L('Testa rösten', 'Test the voice')}</button>
+    <div id="speechBar" class="speech-bar" ${S.speech && !S.speech.title ? '' : 'hidden'}>${S.speech && !S.speech.title ? speechBarHtml() : ''}</div>`;
+}
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 function speechBarHtml() {
   const sp = S.speech; if (!sp) return '';
-  const label = sp.state === 'loading' ? L('Souschefen skriver sammanfattningen…', 'The sous-chef is writing the summary…') : sp.state === 'paused' ? L('Pausad', 'Paused') : L('Läser upp', 'Reading aloud');
-  return `<span class="sb-label">${sp.state === 'playing' ? '<span class="sb-wave" aria-hidden="true"><i></i><i></i><i></i></span>' : ''}${label}${sp.total ? ` <span class="muted">${sp.idx + 1}/${sp.total}</span>` : ''}</span>
+  const label = sp.state === 'loading' ? (sp.step === 'voice' ? L('Skapar rösten…', 'Creating the voice…') : L('Souschefen skriver sammanfattningen…', 'The sous-chef is writing the summary…'))
+    : sp.state === 'paused' ? L('Pausad', 'Paused') : L('Läser upp', 'Reading aloud');
+  const prog = sp.mode === 'ai' && sp.dur ? `${mmss(sp.pos || 0)} / ${mmss(sp.dur)}` : sp.total ? `${sp.idx + 1}/${sp.total}` : '';
+  return `<span class="sb-label">${sp.state === 'playing' ? '<span class="sb-wave" aria-hidden="true"><i></i><i></i><i></i></span>' : ''}${label}${prog ? ` <span class="muted">${prog}</span>` : ''}</span>
     ${sp.state !== 'loading' ? `<button class="ghost small" data-speechpause>${sp.state === 'paused' ? L('▶ Fortsätt', '▶ Resume') : L('⏸ Paus', '⏸ Pause')}</button>` : ''}
     <button class="ghost small" data-speechstop>${L('■ Stopp', '■ Stop')}</button>`;
 }
 function updateSpeechBar() { const el = $('#speechBar'); if (!el) return; el.hidden = !S.speech; el.innerHTML = speechBarHtml(); const b = $('[data-listen]'); if (b) b.setAttribute('aria-pressed', String(!!S.speech)); }
+// Enhetens röst: bästa svenska (eller engelska) rösten – Premium/Förbättrad före kompakta
+function deviceVoices() { const want = L('sv', 'en'); try { return speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith(want)); } catch { return []; } }
 function pickVoice() {
-  const want = L('sv', 'en'), voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith(want));
-  const pref = L(/alva|klara|oskar|google|premium|enhanced|förbättrad/i, /google uk|serena|daniel|premium|enhanced|google us/i);
-  return voices.find(v => pref.test(v.name) && v.localService !== false) || voices.find(v => pref.test(v.name)) || voices[0] || null;
+  const vs = deviceVoices();
+  const chosen = S.settings.deviceVoice && vs.find(v => v.name === S.settings.deviceVoice); if (chosen) return chosen;
+  const score = v => (/premium/i.test(v.name) ? 40 : 0) + (/enhanced|förbättrad|neural|natural/i.test(v.name) ? 30 : 0) + (/google/i.test(v.name) ? 15 : 0) + (/alva|klara|oskar/i.test(v.name) ? 5 : 0) + (v.localService ? 2 : 0);
+  return vs.slice().sort((a, b) => score(b) - score(a))[0] || null;
 }
-function stopSpeech() { S.speech = null; try { speechSynthesis.cancel(); } catch { } updateSpeechBar(); }
-async function listen() {
-  const r = S.current.recipe; if (!r) return;
-  if (S.speech) { stopSpeech(); return; }
-  S.speech = { state: 'loading', idx: 0, total: 0, title: r.title }; updateSpeechBar();
-  try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { }  // låser upp ljudet i iOS medan texten skrivs
-  let text = r.spoken && r.spoken.sig === spokenSig(r) ? r.spoken.text : '';
-  if (!text) {
-    try {
-      const f = portionsFor(r) / (r.servings || 4);
-      const brief = { title: r.title, intro: r.intro, time: r.time, activeTime: r.activeTime, ahead: r.ahead, overview: r.overview, servings: portionsFor(r),
-        ingredients: r.ingredients.map(i => i.name), steps: r.steps.map(x => (x.title ? x.title + ': ' : '') + scaleStepText(x.text, f)), tips: r.tips, troubleshoot: (r.troubleshoot || []).slice(0, 2) };
-      const o = await geminiJSON(`Skriv en talad sammanfattning av receptet nedan, för uppläsning med en röst. Lyssnaren ska få en helhetsbild utan att läsa receptet.
+function audioEl() {
+  if (!S.audio) {
+    const a = S.audio = new Audio(); a.preload = 'auto';
+    a.addEventListener('timeupdate', () => { const sp = S.speech; if (!sp || sp.mode !== 'ai' || a.src === SILENT_WAV) return;
+      if (sp.title && (S.route.view !== 'recipe' || S.current.recipe?.title !== sp.title)) { stopSpeech(); return; }
+      sp.pos = a.currentTime; sp.dur = isFinite(a.duration) ? a.duration : sp.dur; const now = Date.now(); if (!sp._t || now - sp._t > 500) { sp._t = now; updateSpeechBar(); } });
+    a.addEventListener('ended', () => { if (S.speech?.mode === 'ai' && a.src !== SILENT_WAV) stopSpeech(); });
+  }
+  return S.audio;
+}
+function stopSpeech() {
+  S.speech = null;
+  try { speechSynthesis.cancel(); } catch { }
+  if (S.audio) { try { S.audio.pause(); } catch { } }
+  updateSpeechBar();
+}
+async function spokenText(r) {
+  if (r.spoken && r.spoken.sig === spokenSig(r)) return r.spoken.text;
+  const f = portionsFor(r) / (r.servings || 4);
+  const brief = { title: r.title, intro: r.intro, time: r.time, activeTime: r.activeTime, ahead: r.ahead, overview: r.overview, servings: portionsFor(r),
+    ingredients: r.ingredients.map(i => i.name), steps: r.steps.map(x => (x.title ? x.title + ': ' : '') + scaleStepText(x.text, f)), tips: r.tips, troubleshoot: (r.troubleshoot || []).slice(0, 2) };
+  const o = await geminiJSON(`Skriv en talad sammanfattning av receptet nedan, för uppläsning med en röst. Lyssnaren ska få en helhetsbild utan att läsa receptet.
 Längd: 110–170 ord, ungefär en minut.
 Innehåll i den här ordningen: vad rätten är och ungefär hur lång tid det tar; huvudingredienserna i stora drag (inga mängder, inte varje krydda); hur det går till i 3–4 moment; det som måste göras i förväg eller tar tid; avsluta med 1–2 viktiga tips.
 Stil: som en vänlig kock som pratar. Korta meningar. Inga listor, rubriker, parenteser, emojis eller förkortningar – skriv "matskedar", "grader", "minuter". Tal i siffror går bra.
 Språk: ${L('svenska', 'English')}.
 Recept: ${JSON.stringify(brief)}
 Svara ENDAST med JSON: {"text": "..."}`);
-      text = String(o.text || '').trim();
-      if (!text) throw new Error(L('Souschefen gav ingen sammanfattning.', 'The sous-chef returned no summary.'));
-      if (S.current.recipe === r) {
-        r.spoken = { text, sig: spokenSig(r) };
-        const sv = S.current.recipeSavedId && S.data.recipes.find(x => x.id === S.current.recipeSavedId);
-        if (sv) { sv.spoken = r.spoken; touch(sv); saveData(); }
-        saveCurrent();
-      }
-    } catch (e) { stopSpeech(); toast(e.message || String(e), 4500); return; }
+  const text = String(o.text || '').trim();
+  if (!text) throw new Error(L('Souschefen gav ingen sammanfattning.', 'The sous-chef returned no summary.'));
+  if (S.current.recipe === r) {
+    r.spoken = { text, sig: spokenSig(r) };
+    const sv = S.current.recipeSavedId && S.data.recipes.find(x => x.id === S.current.recipeSavedId);
+    if (sv) { sv.spoken = r.spoken; touch(sv); saveData(); }
+    saveCurrent();
   }
-  if (!S.speech || S.speech.title !== r.title) return;   // stoppad eller nytt recept under tiden
-  // Läs mening för mening – långa yttranden klipps av i vissa webbläsare (iOS)
+  return text;
+}
+// Spelar en text med vald röst. title = receptet som läses (null för provlyssning i inställningarna).
+async function speakText(text, title) {
+  const sp = S.speech;
+  if (voiceMode() === 'ai') {
+    sp.step = 'voice'; updateSpeechBar();
+    try {
+      const blob = await ttsAudio(text, aiVoice());
+      if (S.speech !== sp) return;
+      const a = audioEl(); if (sp.url) URL.revokeObjectURL(sp.url);
+      sp.url = URL.createObjectURL(blob); a.src = sp.url;
+      Object.assign(sp, { mode: 'ai', state: 'playing', pos: 0, dur: 0 }); updateSpeechBar();
+      await a.play();
+      return;
+    } catch (e) {
+      if (S.speech !== sp) return;
+      console.warn('AI-röst', e);
+      if (!S.ttsWarned) { S.ttsWarned = true; toast(L(`Googles röst gick inte att använda (${e.message}). Läser med enhetens röst.`, `Google's voice could not be used (${e.message}). Using the device voice.`), 6000); }
+    }
+  }
   const parts = text.replace(/\s+/g, ' ').match(/[^.!?]+[.!?]+["”»]?|[^.!?]+$/g)?.map(x => x.trim()).filter(Boolean) || [text];
-  const voice = pickVoice();
-  Object.assign(S.speech, { state: 'playing', idx: 0, total: parts.length, parts, voice }); updateSpeechBar();
+  Object.assign(sp, { mode: 'device', state: 'playing', idx: 0, total: parts.length, parts, voice: pickVoice() }); updateSpeechBar();
   speakPart();
 }
+async function listen() {
+  const r = S.current.recipe; if (!r) return;
+  if (S.speech) { stopSpeech(); return; }
+  S.speech = { state: 'loading', step: 'text', idx: 0, total: 0, title: r.title }; updateSpeechBar();
+  unlockAudio();
+  let text;
+  try { text = await spokenText(r); } catch (e) { stopSpeech(); toast(e.message || String(e), 4500); return; }
+  if (!S.speech || S.speech.title !== r.title) return;   // stoppad eller nytt recept under tiden
+  speakText(text, r.title);
+}
+// iOS spelar bara upp ljud som startas direkt av ett tryck – lås upp båda vägarna medan texten och rösten tas fram
+function unlockAudio() {
+  try { if (voiceMode() === 'ai') { const a = audioEl(); a.src = SILENT_WAV; a.play().catch(() => {}); } } catch { }
+  try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { }
+}
+async function testVoice() {
+  if (S.speech) stopSpeech();
+  S.speech = { state: 'loading', step: 'voice', idx: 0, total: 0, title: null }; updateSpeechBar();
+  unlockAudio();
+  speakText(L('Hej! Så här låter jag när jag berättar om ett recept. Först förbereder vi grönsakerna, sedan tar det ungefär tjugo minuter i ugnen.', 'Hi! This is how I sound when I tell you about a recipe. First we prepare the vegetables, then it takes about twenty minutes in the oven.'), null);
+}
 function speakPart() {
-  const sp = S.speech; if (!sp || sp.state !== 'playing') return;
-  if (sp.idx >= sp.parts.length || S.route.view !== 'recipe' || S.current.recipe?.title !== sp.title) { stopSpeech(); return; }
+  const sp = S.speech; if (!sp || sp.state !== 'playing' || sp.mode !== 'device') return;
+  if (sp.idx >= sp.parts.length || (sp.title && (S.route.view !== 'recipe' || S.current.recipe?.title !== sp.title))) { stopSpeech(); return; }
   const u = new SpeechSynthesisUtterance(sp.parts[sp.idx]);
-  u.lang = L('sv-SE', 'en-GB'); if (sp.voice) u.voice = sp.voice; u.rate = 1;
+  u.lang = L('sv-SE', 'en-GB'); if (sp.voice) u.voice = sp.voice; u.rate = 0.97;
   u.onend = () => { if (S.speech !== sp || sp.state !== 'playing') return; sp.idx++; updateSpeechBar(); speakPart(); };
   u.onerror = e => { if (e.error === 'interrupted' || e.error === 'canceled') return; stopSpeech(); toast(L('Uppläsningen avbröts.', 'Reading was interrupted.')); };
   speechSynthesis.speak(u);
 }
-// Paus: avbryt aktuell mening och börja om på den vid Fortsätt (pause()/resume() är opålitligt i flera webbläsare)
+// Paus. Enhetens röst: avbryt meningen och börja om på den (pause()/resume() är opålitligt i flera webbläsare).
 function toggleSpeechPause() {
   const sp = S.speech; if (!sp || sp.state === 'loading') return;
-  if (sp.state === 'playing') { sp.state = 'paused'; speechSynthesis.cancel(); }
+  if (sp.mode === 'ai') { const a = audioEl(); if (sp.state === 'playing') { sp.state = 'paused'; a.pause(); } else { sp.state = 'playing'; a.play().catch(() => {}); } }
+  else if (sp.state === 'playing') { sp.state = 'paused'; speechSynthesis.cancel(); }
   else { sp.state = 'playing'; speakPart(); }
   updateSpeechBar();
 }
-if ('speechSynthesis' in window) { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => {}; } catch { } }
+if ('speechSynthesis' in window) { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => { if (S.route?.view === 'settings' && S.openSecs?.has('voice')) keepScroll(renderStage); }; } catch { } }
 const fmtMin = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`;
 function notesBox(saved) {
   return `<div class="notes-box">
@@ -1729,6 +1857,7 @@ function secSummary(key) {
     case 'cuisines': return list(P.cuisines, L('Alla kök', 'All cuisines'));
     case 'equipment': return list([...P.equipment, ...P.customEquipment], L('Vanligt kök', 'Regular kitchen'));
     case 'pantry': { const n = pantryOf(P).length; return n ? L(`${n} basvaror`, `${n} staples`) : L('Tomt', 'Empty'); }
+    case 'voice': return voiceMode() === 'ai' ? L(`Googles AI-röst, ${tv(TTS_VOICES.find(v => v[0] === aiVoice())[1]).toLowerCase()}`, `Google AI voice, ${EN_VOICE_DESC[TTS_VOICES.find(v => v[0] === aiVoice())[1]].toLowerCase()}`) : L('Enhetens röst', 'Device voice') + (S.settings.deviceVoice ? `, ${S.settings.deviceVoice}` : '');
     case 'drinks': return priceText(P).replace(/^./, c => c.toUpperCase()) + (P.drinkNA ? L(', alkoholfritt alternativ', ', alcohol-free option') : '') + (P.drinkWeekday ? L(', även vardag', ', weekdays too') : '') + (drinkArr(P, 'drinkLike').length ? ', ' + P.drinkLike.map(tv).join('/').toLowerCase() : '') + (drinkArr(P, 'drinkRange').length ? ', ' + P.drinkRange.map(tv).join('/').toLowerCase() : '') + (drinkArr(P, 'drinkPack').length === 1 ? ', ' + tv(P.drinkPack[0]).toLowerCase() : '') + (P.drinkEco ? L(', ekologiskt', ', organic') : '');
     case 'bread': { const b = [...P.breadLeaven.map(tv), lab(BREAD_OPT.proof, P.breadProof), lab(BREAD_OPT.knead, P.breadKnead), lab(BREAD_OPT.hydration, P.breadHydration), ...P.breadFlour.map(tv), ...P.breadBake.map(tv)].filter(Boolean);
       return b.length ? b.join(', ') : L('Efter receptet', 'Follow the recipe'); }
@@ -1939,6 +2068,7 @@ function viewSettings() {
     <h2 class="set-group">${L('App och konto', 'App and account')}</h2>
     <div class="set-list">
       <div class="set-row"><span class="ss-title">${L('Inköpslistan', 'Shopping list')}</span><a class="ghost small" href="${SHOP_URL}" target="_blank" rel="noopener">${L('Öppna', 'Open')}</a></div>
+      ${sec('voice', L('Uppläsning', 'Read-aloud'), voiceSettings())}
       <div class="set-row"><span class="ss-title">Språk / Language</span>${langPicker()}</div>
       ${sec('account', window.Cloud?.configured() ? L('Konto och familj', 'Account and family') : L('Koppling', 'Connection'), window.Cloud?.configured() ? Cloud.accountCard() : connection)}
       ${sec('advanced', L('Avancerat', 'Advanced'), advanced)}
@@ -1982,6 +2112,7 @@ function bindStage() {
   st.querySelectorAll('[data-ptext]').forEach(el => {
     el.oninput = debounce(() => { const k = el.dataset.ptext; if (k === 'profile') S.data.profile = el.value; else S.data.prefs[k] = el.value; prefsChanged(true); }, 500);
   });
+  st.querySelectorAll('[data-setsel]').forEach(el => { el.onchange = () => { S.settings[el.dataset.setsel] = el.value; saveSettings(); refreshSummaries(); }; });
   st.querySelectorAll('[data-psel]').forEach(el => { el.onchange = () => { S.data.prefs[el.dataset.psel] = el.value; prefsChanged(); }; });
   const imp = $('#importFile', st);
   if (imp) imp.onchange = async e => {
@@ -2023,6 +2154,8 @@ $('#stage').addEventListener('click', async e => {
   const sv = t.closest('[data-serve]');
   if (sv) { const r = S.current.recipe, x = r.serveWith?.[+sv.dataset.serve]; if (x) send(L(`Ge mig det kompletta receptet på ${x.name} som tillbehör till ${r.title}, för samma antal portioner.`, `Give me the complete recipe for ${x.name} as a side for ${r.title}, for the same number of servings.`), null, { flow: true, newDish: true }); return; }
   if (t.closest('[data-listen]')) { listen(); return; }
+  const vm = t.closest('[data-voicemode]'); if (vm) { S.settings.voice = vm.dataset.voicemode; S.ttsWarned = false; saveSettings(); keepScroll(renderStage); return; }
+  if (t.closest('[data-voicetest]')) { testVoice(); return; }
   if (t.closest('[data-speechpause]')) { toggleSpeechPause(); return; }
   if (t.closest('[data-speechstop]')) { stopSpeech(); return; }
   if (t.closest('[data-shopopen]')) { openShop(); return; }

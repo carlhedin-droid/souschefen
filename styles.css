@@ -803,3 +803,4 @@ a.howto { text-decoration: none; color: var(--ink); }
 /* Smal mobil: statusknappen visar bara tiden (dag och portioner finns i snabbvalet) */
 .status-btn .tiny { display: none; }
 @media (max-width: 380px) { .status-btn .short { display: none !important; } .status-btn .tiny { display: inline; } }
+.set-row a.ghost { color: var(--ink); text-decoration: none; }
