@@ -378,7 +378,7 @@ Regler:
       - "lookFor": druvor eller områden och smakklockor (fyllighet, strävhet, fruktsyra, sötma, skala 1–12).
     - "priceTip": var det finns mest för pengarna i vår prisklass.
     - "nonAlcoholic": om inställningen säger det; "kind" är alkoholfritt-rott, alkoholfritt-vitt, alkoholfritt-mousserande, alkoholfri-ol eller annat (hemgjort).
-  - "spoken": en talad sammanfattning för uppläsning, 110–170 ord: vad rätten är och ungefär hur lång tid det tar, huvudingredienserna i stora drag (inga mängder), hur det går till i 3–4 moment, det som måste göras i förväg, och 1–2 viktiga tips. Skriv som en vänlig kock pratar: korta meningar, inga listor, parenteser eller förkortningar ("matskedar", "grader", "minuter"). Skriv en ny när receptet ändras.
+  - "spoken": en talad genomgång för uppläsning, 90–150 ord. Gå rakt på sak: nämn INTE rättens namn och beskriv eller sälj inte rätten (inga omdömen som "krämig", "god", "klassiker", ingen hälsning eller avrundning) – lyssnaren vet redan vad den lagar. Börja direkt med upplägget: total tid och det som måste göras i förväg. Sedan huvudmomenten i ordning med det som avgör resultatet (värme, tider, klartecken), och vad som kan göras parallellt. Avsluta med 1–2 tips som påverkar resultatet. Skriv som en vänlig kock pratar: korta meningar, inga listor, parenteser eller förkortningar ("matskedar", "grader", "minuter"). Skriv en ny när receptet ändras.
   - "storage": hållbarhet i kyl, om den går att frysa (och hur), och en idé för resterna. null om det inte är relevant (t.ex. en dryck).
 - Varje steg har "title": 2–4 ord i imperativ som namnger momentet, t.ex. "Förbered grönsakerna", "Montera lasagnen", "Grädda i ugnen". Upprepa inte rubriken i "text". Även vid renskrivning.
 - I varje steg: skriv ut mängderna i texten och lista ingrediensernas id i "uses". "minutes" anges för steg med vänte-/tillagningstid.
@@ -956,7 +956,7 @@ function recipeDiff(a, b) {
 }
 const CLAIM_RE = /(i(?:'ve| have) (?:updated|changed|adjusted|replaced|added|removed)|has been (?:updated|changed|adjusted)|here is the (?:new|updated|revised)|uppdaterat|uppdaterade|uppdaterats|uppdaterar|ändrat|ändrade|ändrats|justerat|justerade|justerats|har bytt|bytt ut|bytts ut|lagt till|lagts till|tagit bort|tagits bort|här är (det|ditt|ert) (nya|ändrade|reviderade))/i;
 // Signatur för Lyssna-sammanfattningen: ändras receptet skrivs en ny
-const spokenSig = r => [L('sv', 'en'), r.title, r.steps.length, r.steps.map(x => x.text).join('').length, r.ingredients.length].join('|');
+const spokenSig = r => ['s2', L('sv', 'en'), r.title, r.steps.length, r.steps.map(x => x.text).join('').length, r.ingredients.length].join('|');
 function normalizeRecipe(r) {
   if (!r || !Array.isArray(r.ingredients) || !Array.isArray(r.steps)) return null;
   const arr = x => Array.isArray(x) ? x : [];
@@ -1707,12 +1707,12 @@ function stopSpeech() {
 async function spokenText(r) {
   if (r.spoken && r.spoken.sig === spokenSig(r)) return r.spoken.text;
   const f = portionsFor(r) / (r.servings || 4);
-  const brief = { title: r.title, intro: r.intro, time: r.time, activeTime: r.activeTime, ahead: r.ahead, overview: r.overview, servings: portionsFor(r),
+  const brief = { title: r.title, time: r.time, activeTime: r.activeTime, ahead: r.ahead, overview: r.overview, servings: portionsFor(r),
     ingredients: r.ingredients.map(i => i.name), steps: r.steps.map(x => (x.title ? x.title + ': ' : '') + scaleStepText(x.text, f)), tips: r.tips, troubleshoot: (r.troubleshoot || []).slice(0, 2) };
-  const o = await geminiJSON(`Skriv en talad sammanfattning av receptet nedan, för uppläsning med en röst. Lyssnaren ska få en helhetsbild utan att läsa receptet.
-Längd: 110–170 ord, ungefär en minut.
-Innehåll i den här ordningen: vad rätten är och ungefär hur lång tid det tar; huvudingredienserna i stora drag (inga mängder, inte varje krydda); hur det går till i 3–4 moment; det som måste göras i förväg eller tar tid; avsluta med 1–2 viktiga tips.
-Stil: som en vänlig kock som pratar. Korta meningar. Inga listor, rubriker, parenteser, emojis eller förkortningar – skriv "matskedar", "grader", "minuter". Tal i siffror går bra.
+  const o = await geminiJSON(`Skriv en talad genomgång av receptet nedan, för uppläsning med en röst. Lyssnaren ska få en helhetsbild av hur arbetet går till utan att läsa receptet.
+Längd: 90–150 ord, under en minut.
+Gå rakt på sak: nämn INTE rättens namn och beskriv eller sälj inte rätten (inga omdömen som "krämig", "god", "klassiker", ingen hälsning eller avrundning) – lyssnaren vet redan vad den lagar. Börja direkt med upplägget: total tid och det som måste göras i förväg. Sedan huvudmomenten i ordning med det som avgör resultatet (värme, tider, klartecken), och vad som kan göras parallellt. Avsluta med 1–2 tips som påverkar resultatet.
+Stil: som en erfaren kock som går igenom planen med en kollega. Korta meningar. Inga listor, rubriker, parenteser, emojis eller förkortningar – skriv "matskedar", "grader", "minuter". Tal i siffror går bra.
 Språk: ${L('svenska', 'English')}.
 Recept: ${JSON.stringify(brief)}
 Svara ENDAST med JSON: {"text": "..."}`);
