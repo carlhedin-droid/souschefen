@@ -994,7 +994,29 @@ function partialReply(acc) {
   if (!m) return '';
   try { return JSON.parse('"' + m[1].replace(/\\$/, '') + '"'); } catch { return m[1].replace(/\\n/g, '\n'); }
 }
+// Plockar ut de förslag som hunnit skrivas klart i den strömmande JSON:en
+function partialSuggestions(acc) {
+  const m = /"suggestions"\s*:\s*\[/.exec(acc);
+  if (!m) return [];
+  const out = []; let depth = 0, start = -1, inStr = false, esc_ = false;
+  for (let i = m.index + m[0].length; i < acc.length; i++) {
+    const c = acc[i];
+    if (inStr) { if (esc_) esc_ = false; else if (c === '\\') esc_ = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') { if (!depth) start = i; depth++; }
+    else if (c === '}') { depth--; if (!depth && start >= 0) { try { const o = JSON.parse(acc.slice(start, i + 1)); if (o && o.name) out.push(o); } catch { } start = -1; } }
+    else if (c === ']' && !depth) break;
+  }
+  return out;
+}
 function showProgress(acc, override) {
+  if (S.busy === 'flow' && !override && ['home', 'suggestions'].includes(S.route.view)) {
+    const ps = partialSuggestions(acc);
+    if (ps.length > (S.partialSugg?.length || 0)) {
+      S.partialSugg = ps; S.partialIntro = partialReply(acc);
+      const sc = $('#stage').scrollTop; renderStage(); $('#stage').scrollTop = sc;
+    }
+  }
   const what = override ? override : S.readingHost && !acc ? L(`Läser receptet från ${S.readingHost}…`, `Reading the recipe from ${S.readingHost}…`) : /"recipe"\s*:\s*\{/.test(acc) ? L('Souschefen skriver receptet…', 'The sous-chef is writing the recipe…')
     : /"suggestions"\s*:\s*\[/.test(acc) ? L(`Souschefen plockar fram förslag… (${(acc.match(/"name"\s*:/g) || []).length} hittills)`, `The sous-chef is picking suggestions… (${(acc.match(/"name"\s*:/g) || []).length} so far)`)
     : L('Souschefen tänker…', 'The sous-chef is thinking…');
@@ -1012,7 +1034,7 @@ async function send(text, image, opts = {}) {
   S.readingHost = (() => { const l = (text.match(/https?:\/\/[^\s]+/) || [])[0]; try { return l ? new URL(l).hostname.replace(/^www\./, '') : ''; } catch { return ''; } })();
   const userMsg = { role: 'user', text: text || L('Vad kan jag laga av det här?', 'What can I cook with this?'), image, at: now(), hidden: flow, ...(opts.display ? { display: opts.display } : {}) };
   S.chat.push(userMsg);
-  S.busy = flow ? 'flow' : 'chat'; saveChat(); renderChat(true);
+  S.busy = flow ? 'flow' : 'chat'; S.partialSugg = null; saveChat(); renderChat(true);
   if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
   try {
     const raw = await callModel(showProgress);
@@ -1074,7 +1096,7 @@ async function send(text, image, opts = {}) {
     S.chat.push({ role: 'error', text: nokey ? L('Souschefen behöver en gratis Gemini-nyckel. Lägg in den under Inställningar.', 'The sous-chef needs a free Gemini key. Add it under Settings.') : L(`Det gick inte att nå souschefen: ${e.message}`, `Could not reach the sous-chef: ${e.message}`), nokey, at: now() });
     openChat(true);
   } finally {
-    S.busy = false; saveChat(); renderChat(true);
+    S.busy = false; S.partialSugg = null; saveChat(); renderChat(true);
     if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
     if (!document.querySelector('.app[data-chat="open"]')) $('#chatDot').hidden = false;
   }
@@ -1210,6 +1232,7 @@ function viewHome() {
   const P = S.data.prefs;
   const t = todayTime();
   const hist = (S.data.history || []).slice(0, 5);
+  if (S.busy === 'flow' && S.partialSugg?.length) return viewSuggestions();
   if (S.busy === 'flow') {
     return `<section class="home"><div class="loading-stage">${potSvg()}<span id="stageStatus">${L('Souschefen tänker…', 'The sous-chef is thinking…')}</span></div></section>`;
   }
@@ -1244,12 +1267,14 @@ function potSvg() {
 }
 
 function viewSuggestions() {
-  if (S.busy === 'flow') return `<section class="home"><div class="loading-stage">${potSvg()}<span id="stageStatus">${L('Souschefen tänker…', 'The sous-chef is thinking…')}</span></div></section>`;
-  const list = S.current.suggestions || [];
+  const streaming = S.busy === 'flow' && S.partialSugg?.length;
+  if (S.busy === 'flow' && !streaming) return `<section class="home"><div class="loading-stage">${potSvg()}<span id="stageStatus">${L('Souschefen tänker…', 'The sous-chef is thinking…')}</span></div></section>`;
+  const list = streaming ? S.partialSugg : S.current.suggestions || [];
+  const intro = streaming ? S.partialIntro : S.current.suggIntro;
   if (!list.length) return `<div class="empty"><h2>${L('Inga förslag än', 'No suggestions yet')}</h2><p>${L('Berätta vad ni har så föreslår souschefen rätter.', 'Tell the sous-chef what you have and get dish ideas.')}</p><button class="btn" data-go="home">${L('Till start', 'To start')}</button></div>`;
   return `<section>
-    <div class="sugg-head"><h1>${L(`${list.length} förslag till ${dayInfo().name}`, `${list.length} suggestions for ${dayName()}`)}</h1></div>
-    ${S.current.suggIntro ? `<div class="sugg-intro">${md(S.current.suggIntro)}</div>` : ''}
+    <div class="sugg-head"><h1>${streaming ? L(`Förslag till ${dayInfo().name}`, `Suggestions for ${dayName()}`) : L(`${list.length} förslag till ${dayInfo().name}`, `${list.length} suggestions for ${dayName()}`)}</h1></div>
+    ${intro ? `<div class="sugg-intro">${md(intro)}</div>` : ''}
     <div class="sugg-grid">${list.map((s, i) => `
       <article class="sugg ${s.healthier ? 'healthier' : ''}">
         <div class="tags">
@@ -1265,10 +1290,11 @@ function viewSuggestions() {
           ${s.keyIngredients?.length ? `<dt>${L('Handla', 'Shop for')}</dt><dd>${esc(s.keyIngredients.join(', '))}</dd>` : ''}
           ${s.equipment ? `<dt>${L('Utrustning', 'Equipment')}</dt><dd>${esc(s.equipment)}</dd>` : ''}
         </dl>
-        <button class="btn" data-pick="${i}">${L('Ge mig receptet', 'Give me the recipe')}</button>
+        <button class="btn" data-pick="${i}" ${streaming ? 'disabled' : ''}>${L('Ge mig receptet', 'Give me the recipe')}</button>
       </article>`).join('')}
+      ${streaming ? `<div class="sugg-more-loading" aria-live="polite">${potSvg()}<span>${L('Fler förslag på väg…', 'More suggestions coming…')}</span></div>` : ''}
     </div>
-    <div class="sugg-foot row" style="margin-top:20px"><button class="ghost" data-more>${L('Fler förslag', 'More suggestions')}</button></div>
+    ${streaming ? '' : `<div class="sugg-foot row" style="margin-top:20px"><button class="ghost" data-more>${L('Fler förslag', 'More suggestions')}</button></div>`}
   </section>`;
 }
 
