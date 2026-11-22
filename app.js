@@ -61,7 +61,7 @@ function setLang(lang) {
   applyStaticLang(); renderStatus(); renderStage(); renderChat(); renderAttach(); tickTimers();
   const el = $('#sync'); if (el) el.textContent = tv(S.sync.state || '');
 }
-const ENGLISH_RULE = `- LANGUAGE: The app is set to English. Keep "howTo" search terms in English. Write everything the user sees in natural English: "reply", all recipe and suggestion text (title, origin, intro, step titles, spoken, overview, activeTime, ahead, ingredient names, groups and swaps, steps, health, tips, troubleshoot, serveWith, storage, drinks (why, priceTip, option title, lookFor and why, nonAlcoholic title and why; keep kind, taste, food, grape, country and region values exactly as specified – taste slugs, grape and country names stay Swedish/as on Systembolaget), why, keyIngredients, equipment) and "learn". This overrides the Swedish examples above, and the instructions being in Swedish does not change it. Use g, kg, ml, l, tbsp and tsp, and "Easy", "Medium" or "Advanced" for "difficulty". Keep "tag" exactly VARDAG or HELG (VARDAG means weekday, HELG means weekend). Family notes may be in Swedish; understand them and answer in English. If a recipe on screen or at a link is in Swedish or another language, translate it when you send it. If information is missing: ask in "reply" and set suggestions/recipe to null.`;
+const ENGLISH_RULE = `- LANGUAGE: The app is set to English. Write everything the user sees in natural English: "reply", all recipe and suggestion text (title, origin, intro, step titles, spoken, overview, activeTime, ahead, ingredient names, groups and swaps, steps, health, tips, troubleshoot, serveWith, storage, drinks (why, priceTip, option title, lookFor and why, nonAlcoholic title and why; keep kind, taste, food, grape, country and region values exactly as specified – taste slugs, grape and country names stay Swedish/as on Systembolaget), why, keyIngredients, equipment) and "learn". This overrides the Swedish examples above, and the instructions being in Swedish does not change it. Use g, kg, ml, l, tbsp and tsp, and "Easy", "Medium" or "Advanced" for "difficulty". Keep "tag" exactly VARDAG or HELG (VARDAG means weekday, HELG means weekend). Family notes may be in Swedish; understand them and answer in English. If a recipe on screen or at a link is in Swedish or another language, translate it when you send it. If information is missing: ask in "reply" and set suggestions/recipe to null.`;
 const langRule = () => FORMAT_RULES.replace('- Svara på svenska. Om info saknas: ställ motfrågan i "reply" och sätt suggestions/recipe till null.', L('- Svara på svenska. Om info saknas: ställ motfrågan i "reply" och sätt suggestions/recipe till null.', ENGLISH_RULE));
 
 /* ============ Standardtexter ============ */
@@ -300,7 +300,7 @@ const RECIPE_CORE_PROPS = {
   title: S_STR, origin: S_STR, countries: S_ARR, source: S_STRN, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, servings: { type: 'INTEGER' }, intro: S_STR,
   overview: S_ARR, activeTime: S_STRN, ahead: S_STRN,
   ingredients: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, amount: S_STR, name: S_STR, note: S_STRN, group: S_STRN, pantry: { type: 'BOOLEAN' }, staple: { type: 'BOOLEAN' } }, required: ['id', 'amount', 'name'], propertyOrdering: ['id', 'amount', 'name', 'note', 'group', 'pantry', 'staple'] } },
-  steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' }, howTo: S_STRN }, required: ['title', 'text'], propertyOrdering: ['title', 'text', 'uses', 'minutes', 'optional', 'howTo'] } },
+  steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' } }, required: ['title', 'text'], propertyOrdering: ['title', 'text', 'uses', 'minutes', 'optional'] } },
   health: { type: 'OBJECT', nullable: true, properties: { rating: { type: 'STRING', enum: ['bra', 'neutral', 'mindre bra'] }, why: S_STR }, required: ['rating'] },
 };
 // Huvudsvaret: chatt, förslag eller kärnreceptet (ingredienser och steg). Extradelarna hämtas efteråt (EXTRAS_SCHEMA).
@@ -351,7 +351,7 @@ Du svarar inuti en app. Svara ALLTID med exakt ett JSON-objekt – ingen text f�
     "overview": ["Marinera kycklingen", "Stek den i samma panna", "Koka ihop såsen"],
     "activeTime": "40 min" | null, "ahead": "Marinera minst 3 h, gärna över natten" | null,
     "ingredients": [ { "id": "i1", "amount": "300 g", "name": "kycklinglårfilé", "note": "i bitar" | null, "group": "Marinad" | null, "pantry": false, "staple": false } ],
-    "steps": [ { "title": "Bryn kycklingen", "text": "Bryn 300 g kycklinglårfilé ...", "uses": ["i1"], "minutes": 8 | null, "optional": false, "howTo": "how to sear chicken thighs" | null } ],
+    "steps": [ { "title": "Bryn kycklingen", "text": "Bryn 300 g kycklinglårfilé ...", "uses": ["i1"], "minutes": 8 | null, "optional": false } ],
     "health": { "rating": "bra" | "neutral" | "mindre bra", "why": "Mycket protein och grönt, måttligt med fett" } | null
   },
   "learn": [ "kort ny lärdom om familjens smak/vanor" ],
@@ -365,7 +365,6 @@ Regler:
   - "pantry": true om ingrediensen finns i SKAFFERIET (även med annat namn, t.ex. "rapsolja" = Neutral olja) eller är en SJÄLVKLARHET (se nedan, t.ex. salt, socker, matolja, smör, lök). Annars false.
   - "staple": true för skafferi- och basvaror som brukar finnas hemma och håller ett tag (torrvaror, kryddor, såser, konserver, oljor, basgrönsaker som lök, vitlök, morot, selleri, citron, ingefära) – även om vi inte har dem. false för huvudråvaror som kött, fisk och färska örter.
   - "optional": true för steg som går att hoppa över utan att rätten faller (garnering, mixning, rostning av extra topping).
-  - "howTo": för 1–3 tekniska moment som är lättare att se än att läsa (vika dumplings, filea fisk, temperera choklad, knåda deg): en kort YouTube-sökterm PÅ ENGELSKA. Annars null.
 - Varje steg har "title": 2–4 ord i imperativ som namnger momentet, t.ex. "Förbered grönsakerna", "Montera lasagnen", "Grädda i ugnen". Upprepa inte rubriken i "text". Även vid renskrivning.
 - I varje steg: skriv ut mängderna i texten och lista ingrediensernas id i "uses". "minutes" anges för steg med vänte-/tillagningstid.
 - "countries": ISO 3166-1 alfa-2-koder (versaler) för rättens ursprungsland, t.ex. ["MY"], ["FR","SE"] för fusion. Regionalt kök → huvudlandet (Sydamerikanskt ceviche → ["PE"]).
@@ -1540,7 +1539,6 @@ function viewRecipe() {
         ${noteInline(r, { step: k + 1 })}
         <div class="step-tools">
           ${noteRefs(r, { step: k + 1 })}
-          ${s.howTo ? `<a class="ghost howto" href="https://www.youtube.com/results?search_query=${encodeURIComponent(s.howTo)}" target="_blank" rel="noopener">▶ ${L('Visa hur', 'Show me')}</a>` : ''}
           ${s.minutes ? `<button class="ghost" data-timer="${k}">⏱ ${fmtMin(s.minutes)}</button>` : ''}
           <button class="ghost" data-done="${k}">${S.doneSteps[k] ? L('Ångra', 'Undo') : L('Klar', 'Done')}</button>
         </div>
@@ -2593,7 +2591,7 @@ $('#stage').addEventListener('click', async e => {
   if (t.closest('[data-drinks]')) { if (S.current.recipe) fetchExtras(S.current.recipe, { forceDrinks: true }); return; }
   if (t.closest('[data-extras]')) { if (S.current.recipe) fetchExtras(S.current.recipe); return; }
   if (t.closest('[data-enrich]') && S.current.recipe?.steps.some(x => x.title)) { fetchExtras(S.current.recipe); return; }
-  if (t.closest('[data-enrich]')) { openChat(true); send(L('Komplettera receptet med "title" för varje steg, översikt, aktiv tid, det som måste göras i förväg, byten för ingredienser, valfria steg, "howTo" för svåra moment, om det går fel, servera med och förvaring. Ändra INTE ingredienserna eller stegens text. Skicka HELA receptet i "recipe".', 'Add a "title" to every step, an overview, active time, what must be done ahead, ingredient swaps, optional steps, "howTo" for tricky techniques, troubleshooting, serve-with ideas and storage to the recipe. Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('Lägg till stegrubriker, översikt och tips', 'Add step headings, overview and tips'), enrich: true }); return; }
+  if (t.closest('[data-enrich]')) { openChat(true); send(L('Komplettera receptet med "title" för varje steg, översikt, aktiv tid, det som måste göras i förväg, byten för ingredienser, valfria steg, om det går fel, servera med och förvaring. Ändra INTE ingredienserna eller stegens text. Skicka HELA receptet i "recipe".', 'Add a "title" to every step, an overview, active time, what must be done ahead, ingredient swaps, optional steps, troubleshooting, serve-with ideas and storage to the recipe. Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('Lägg till stegrubriker, översikt och tips', 'Add step headings, overview and tips'), enrich: true }); return; }
   // Recept
   const chk = t.closest('[data-check]');
   if (chk) { S.checked[chk.dataset.check] = chk.checked; const row = chk.closest('.ing'); row.classList.toggle('checked', chk.checked); updateCount(); saveSession(); return; }
