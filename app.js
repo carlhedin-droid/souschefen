@@ -1587,7 +1587,7 @@ function viewRecipe() {
 
   <div class="r-main">
   <section class="r-sec steps" id="r-steps" aria-label="${L('Gör så här', 'Method')}">
-    <div class="sec-head"><h2>${L('Gör så här', 'Method')}</h2><span class="muted step-hint">${L('Tryck på ett steg för att markera var du är', 'Tap a step to mark where you are')}</span>${stepper}</div>
+    <div class="sec-head"><h2>${L('Gör så här', 'Method')}</h2><span class="muted step-hint">${L('Tryck på steget du är på – stegen före fälls ihop', 'Tap the step you are on – earlier steps fold away')}</span>${stepper}</div>
     ${r.steps.some(s => s.optional) ? `<button type="button" class="chip opt opt-toggle" data-hideopt aria-pressed="${!!S.hideOptional}">${L('Dölj steg som kan hoppas över', 'Hide optional steps')}</button>` : ''}
     ${streamingSteps && !r.steps.length ? `<div class="extras-loading">${potSvg()}<span>${L('Souschefen skriver stegen – kolla ingredienserna så länge…', 'The sous-chef is writing the steps – check the ingredients meanwhile…')}</span></div>` : ''}
     <ol>${r.steps.map((s, k) => `
@@ -1597,8 +1597,7 @@ function viewRecipe() {
         ${noteInline(r, { step: k + 1 })}
         <div class="step-tools">
           ${noteRefs(r, { step: k + 1 })}
-          ${s.minutes ? `<button class="ghost" data-timer="${k}">⏱ ${fmtMin(s.minutes)}</button>` : ''}
-          <button class="ghost" data-done="${k}">${S.doneSteps[k] ? L('Ångra', 'Undo') : L('Klar', 'Done')}</button>
+          ${k + 1 < r.steps.length ? `<button class="ghost step-next" data-next="${k}">${L('Nästa steg', 'Next step')} ›</button>` : `<button class="ghost step-next" data-finish>${L('Klart!', 'Done!')}</button>`}
         </div>
       </li>`).join('')}</ol>
     ${streamingSteps && r.steps.length ? `<div class="extras-loading">${potSvg()}<span>${L('Fler steg på väg…', 'More steps coming…')}</span></div>` : ''}
@@ -2683,13 +2682,13 @@ $('#stage').addEventListener('click', async e => {
   }
   const jump = t.closest('[data-jump]');
   if (jump) { scrollToSec(jump.dataset.jump); return; }
-  if (t.closest('[data-startcook]')) { if (S.activeStep == null) S.activeStep = 0; if (!S.cookStart) S.cookStart = Date.now(); if (!$('#stage').classList.contains('split')) { S.rTab = 'steps'; renderStage(); $('#stage').scrollTop = 0; } else refreshSteps(); requestAnimationFrame(() => scrollToSec('r-steps')); saveSession(); return; }
-  const tm = t.closest('[data-timer]');
-  if (tm) { const s = S.current.recipe.steps[+tm.dataset.timer]; startTimer(s.title || L(`Steg ${+tm.dataset.timer + 1}`, `Step ${+tm.dataset.timer + 1}`), s.minutes); return; }
-  const dn = t.closest('[data-done]');
-  if (dn) { const n = +dn.dataset.done; S.doneSteps[n] = !S.doneSteps[n]; if (S.doneSteps[n] && S.activeStep === n) S.activeStep = n + 1 < S.current.recipe.steps.length ? n + 1 : null; refreshSteps(); saveSession(); return; }
+  if (t.closest('[data-startcook]')) { if (S.activeStep == null) { S.activeStep = 0; S.doneSteps = {}; } if (!S.cookStart) S.cookStart = Date.now(); if (!$('#stage').classList.contains('split')) { S.rTab = 'steps'; renderStage(); $('#stage').scrollTop = 0; } else refreshSteps(); requestAnimationFrame(() => scrollToSec('r-steps')); saveSession(); return; }
+  // Steg: det aktiva steget är öppet, stegen före fälls ihop till en rad med bock. Tryck på ett ihopfällt steg för att gå tillbaka.
+  const nx = t.closest('[data-next]');
+  if (nx) { setActiveStep(+nx.dataset.next + 1); return; }
+  if (t.closest('[data-finish]')) { const n = S.current.recipe.steps.length; S.doneSteps = Object.fromEntries([...Array(n).keys()].map(i => [i, true])); S.activeStep = null; refreshSteps(); saveSession(); toast(L('Smaklig måltid!', 'Enjoy your meal!')); return; }
   const step = t.closest('[data-step]');
-  if (step && !t.closest('button')) { const n = +step.dataset.step; S.activeStep = S.activeStep === n ? null : n; if (!S.cookStart) S.cookStart = Date.now(); refreshSteps(); saveSession(); return; }
+  if (step && !t.closest('button') && !t.closest('.note-pop')) { const n = +step.dataset.step; if (S.activeStep !== n) setActiveStep(n); return; }
   if (t.closest('[data-save]')) { saveRecipe(); return; }
   if (t.closest('[data-cooked]')) { const r = savedRecipe(); r.cooked = [...(r.cooked || []), now()]; touch(r); saveData(); toast(L('Antecknat! Sätt gärna betyg och skriv vad som blev bra.', 'Noted! Add a rating and write what went well.')); renderStage(); const n = $('#notes'); if (n) n.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   const rate = t.closest('[data-rate]');
@@ -2785,11 +2784,15 @@ $('#stage').addEventListener('scroll', () => {
   return;  // ingredienser och steg är flikar nu
   nav.querySelectorAll('[data-jump]').forEach(b => b.classList.toggle('on', b.dataset.jump === cur));
 }, { passive: true });
+function setActiveStep(n) {
+  S.activeStep = n; S.doneSteps = Object.fromEntries([...Array(n).keys()].map(i => [i, true]));
+  if (!S.cookStart) S.cookStart = Date.now();
+  refreshSteps(); saveSession();
+}
 function refreshSteps() {
   document.querySelectorAll('.step').forEach(li => {
     const n = +li.dataset.step;
     li.classList.toggle('active', S.activeStep === n); li.classList.toggle('done', !!S.doneSteps[n]);
-    const b = li.querySelector('[data-done]'); if (b) b.textContent = S.doneSteps[n] ? L('Ångra', 'Undo') : L('Klar', 'Done');
   });
   updateCount();
   const a = document.querySelector('.step.active');

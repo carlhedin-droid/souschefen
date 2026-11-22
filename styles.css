@@ -942,3 +942,14 @@ a.howto { text-decoration: none; color: var(--ink); }
   .r-jump button { padding: 0 9px; font-size: 13.5px; }
   .r-jump button[data-rtab="drink"], .r-jump button[data-rtab="more"] { padding: 0 11px; }
 }
+
+/* Klara steg fälls ihop till en rad */
+.step.done { padding-top: 8px; padding-bottom: 8px; opacity: .55; }
+.step.done .step-text, .step.done .step-tools, .step.done .note-pop { display: none; }
+.step.done::before { font-size: 18px; }
+.step.done .step-title { font-size: 15px; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.step.done .step-title::after { content: ' ✓'; color: var(--pandan); text-decoration: none; display: inline-block; margin-left: 4px; }
+.step.done:hover { opacity: .85; }
+.step:not(.active) .step-next { display: none; }
+.step-next { font-weight: 700; }
+.step.done:not(:has(.step-title)) .step-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; text-decoration: line-through; }
