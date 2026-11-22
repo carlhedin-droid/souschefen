@@ -574,6 +574,7 @@ let sessionTimer = null;
 function saveSession() {
   const r = S.current.recipe;
   if (!r || S.route.view !== 'recipe') return;
+  syncTabs();
   if (!S.current.sessionId) newSession();
   clearTimeout(sessionTimer);
   sessionTimer = setTimeout(() => {
@@ -585,6 +586,51 @@ function saveSession() {
     };
     saveData();
   }, 600);
+}
+/* ---------- Öppna recept som flikar (2–3 st), var och en med egna bockar, steg, portioner och chatt ---------- */
+S.tabs = LS.get('fk.tabs', []).filter(t => t && t.recipe && t.recipe.title);
+const MAX_TABS = 3;
+function saveTabs() { LS.set('fk.tabs', S.tabs.map(t => ({ ...t, st: t.st ? { ...t.st, chat: (t.st.chat || []).slice(-30) } : t.st }))); }
+// Första gången: de översta recepten i Senaste blir flikar
+if (!S.tabs.length && (S.data.history || []).length > 1) {
+  S.tabs = S.data.history.slice(0, MAX_TABS).map(h => { const sv = h.savedId && S.data.recipes.find(x => x.id === h.savedId); return { key: recipeKey(h.recipe), recipe: JSON.parse(JSON.stringify(sv || h.recipe)), savedId: sv ? sv.id : null, st: {}, at: h.viewedAt }; });
+}
+function liveTabState() { return { checked: S.checked, doneSteps: S.doneSteps, activeStep: S.activeStep, portions: S.portions, rTab: S.rTab, chat: S.chat.filter(m => !m.hidden).slice(-30).map(m => ({ ...m, image: undefined, view: undefined })), sessionId: S.current.sessionId }; }
+// Håll fliken för receptet som visas uppdaterad; ett nytt recept läggs först och den äldsta fliken faller bort
+function syncTabs() {
+  const r = S.current.recipe; if (!r || S.provisional === r) return;
+  const key = recipeKey(r);
+  let tab = S.tabs.find(t => recipeKey(t.recipe) === key);
+  if (!tab) { tab = { key }; S.tabs.unshift(tab); S.tabs = S.tabs.slice(0, MAX_TABS); }
+  Object.assign(tab, { key, recipe: r, savedId: S.current.recipeSavedId || null, st: liveTabState(), at: now() });
+  saveTabs();
+}
+function switchTab(key) {
+  if (S.busy) { toast(L('Vänta tills souschefen är klar med svaret.', 'Wait until the sous-chef has finished.')); return; }
+  syncTabs();
+  const tab = S.tabs.find(t => recipeKey(t.recipe) === key); if (!tab || tab.recipe === S.current.recipe) return;
+  const st = tab.st || {};
+  S.current.recipe = tab.recipe; S.current.recipeSavedId = tab.savedId || null; S.current.dirty = false;
+  S.current.sessionId = st.sessionId || uid();
+  S.checked = st.checked || {}; S.doneSteps = st.doneSteps || {}; S.activeStep = st.activeStep ?? null; S.portions = st.portions ?? null;
+  S.rTab = st.rTab || 'ing'; S.rTabKey = tab.recipe.title;
+  S.chat = st.chat || []; S.openNote = null; S.openSwap = null; S.healthOpen = false;
+  saveChat(); saveCurrent();
+  if (S.route.view !== 'recipe') go('recipe', { keepChat: true }); else { renderStage(); $('#stage').scrollTop = 0; }
+  renderChat(true); saveSession();
+}
+function closeTab(key) {
+  const wasCurrent = recipeKey(S.current.recipe) === key;
+  S.tabs = S.tabs.filter(t => recipeKey(t.recipe) !== key); saveTabs();
+  if (!wasCurrent) { keepScroll(renderStage); return; }
+  if (S.tabs.length) { S.current.recipe = null; switchTab(recipeKey(S.tabs[0].recipe)); }
+  else { S.current.recipe = null; saveCurrent(); go('home'); }
+}
+function recipeTabsBar(r) {
+  if (S.tabs.length < 2) return '';
+  const cur = recipeKey(r);
+  return `<nav class="rtabs" aria-label="${L('Öppna recept', 'Open recipes')}">${S.tabs.map(t => { const k = recipeKey(t.recipe), on = k === cur;
+    return `<span class="rtab${on ? ' on' : ''}"><button type="button" class="rtab-go" data-rtabsw="${esc(k)}" aria-current="${on}" title="${esc(t.recipe.title)}">${esc(t.recipe.title)}</button><button type="button" class="rtab-x" data-rtabx="${esc(k)}" aria-label="${L(`Stäng ${esc(t.recipe.title)}`, `Close ${esc(t.recipe.title)}`)}">×</button></span>`; }).join('')}</nav>`;
 }
 function addHistory(r, savedId) {
   if (!r) return;
@@ -1055,7 +1101,8 @@ ${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everythi
   const prompt = `Recept (${portionsFor(r)} portioner):\n${JSON.stringify(core)}`;
   try {
     const o = S.settings.provider === 'claude' ? await claudeJSON(system, prompt) : await geminiJSON(prompt, { system, schema: EXTRAS_SCHEMA, temperature: 0.6, kind: 'extradelar' });
-    if (S.current.recipe !== r) return;  // receptet har bytts under tiden
+    const isCur = S.current.recipe === r;
+    if (!isCur && !S.tabs.some(t => t.recipe === r)) return;  // receptet är stängt
     const sw = new Map((Array.isArray(o.swaps) ? o.swaps : []).map(x => [String(x.id), x.options]));
     const merged = { ...r,
       ingredients: r.ingredients.map(i => ({ ...i, swaps: sw.has(i.id) ? sw.get(i.id) : i.swaps })),
@@ -1066,9 +1113,9 @@ ${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everythi
       drinks: r.drinks, spoken: r.spoken && r.spoken.sig === spokenSig(r) ? r.spoken : null };
     normalizeRecipe(merged);
     Object.assign(r, merged);
-    const sv = S.current.recipeSavedId && savedRecipe();
+    const sv = isCur ? S.current.recipeSavedId && savedRecipe() : null;
     if (sv && !S.current.dirty) { Object.assign(sv, stripRecipe(r)); touch(sv); }
-    saveData(); saveCurrent(); saveSession();
+    saveData(); saveTabs(); if (isCur) { saveCurrent(); saveSession(); }
   } catch (e) {
     console.warn('Extradelar', e);
     if (S.current.recipe === r) S.extrasErr = e.message || String(e);
@@ -1559,7 +1606,8 @@ function viewRecipe() {
   const isHelg = String(r.tag).toLowerCase() === 'helg';
   const back = S.current.recipeSavedId ? 'book' : S.current.suggestions ? 'suggestions' : 'home';
   const stepper = `<div class="stepper portions" role="group" aria-label="${L('Portioner', 'Servings')}"><button type="button" data-rport="-1" aria-label="${L('Färre portioner', 'Fewer servings')}">−</button><output>${n} ${L('portioner', 'servings')}</output><button type="button" data-rport="1" aria-label="${L('Fler portioner', 'More servings')}">+</button></div>`;
-  return `<article class="recipe">
+  syncTabs();
+  return `${recipeTabsBar(r)}<article class="recipe">
   <header class="r-head">
     <div class="r-corner">
       ${S.provisional === r ? '' : `<button class="icon-btn r-save${saved ? ' on' : ''}${S.current.dirty ? ' dirty' : ''}" ${!saved || S.current.dirty ? 'data-save' : 'data-rtab="more"'} aria-label="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken – visa anteckningar', 'Saved – show notes')}" title="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken', 'Saved in cookbook')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.2-6.5 4.2v-16a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>`}
@@ -2723,6 +2771,8 @@ $('#stage').addEventListener('click', async e => {
   const oh = t.closest('[data-hist]');
   if (oh) { const h = (S.data.history || []).find(x => x.id === oh.dataset.hist); if (h) { const saved = h.savedId && S.data.recipes.find(x => x.id === h.savedId); S.current.recipe = JSON.parse(JSON.stringify(saved || h.recipe)); S.current.recipeSavedId = saved ? saved.id : null; S.current.dirty = false; S.checked = {}; S.doneSteps = {}; S.activeStep = null; S.portions = null; if (joinIfActive(S.current.recipe)) { go('recipe'); renderChat(true); return; } newSession(); S.chat = []; saveChat(); saveCurrent(); go('recipe'); addHistory(S.current.recipe, S.current.recipeSavedId); saveSession(); } return; }
   if (t.closest('[data-healthwhy]')) { S.healthOpen = !S.healthOpen; keepScroll(renderStage); return; }
+  const tsw = t.closest('[data-rtabsw]'); if (tsw) { switchTab(tsw.dataset.rtabsw); return; }
+  const tsx = t.closest('[data-rtabx]'); if (tsx) { closeTab(tsx.dataset.rtabx); return; }
   const rt = t.closest('[data-rtab]');
   if (rt) {
     const was = S.rTab || 'ing'; S.rTab = rt.dataset.rtab === 'cook' ? 'ing' : rt.dataset.rtab;

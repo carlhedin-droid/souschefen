@@ -962,3 +962,13 @@ a.howto { text-decoration: none; color: var(--ink); }
 
 .r-updating { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 6px 12px; border-radius: 999px; background: var(--pandan-soft); color: var(--ink); font-size: 14px; font-weight: 600; width: fit-content; }
 .r-updating .pot { width: 20px; height: 20px; }
+
+/* Öppna recept som flikar */
+.rtabs { display: flex; gap: 6px; margin: 0 0 12px; overflow-x: auto; scrollbar-width: none; }
+.rtabs::-webkit-scrollbar { display: none; }
+.rtab { display: inline-flex; align-items: center; min-width: 0; max-width: 260px; flex: 0 1 auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rtab.on { background: var(--pandan); border-color: var(--pandan); color: var(--pandan-ink); }
+.rtab-go { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: none; border: 0; color: inherit; font: inherit; font-size: 14px; font-weight: 600; padding: 8px 4px 8px 12px; cursor: pointer; min-height: 38px; }
+.rtab-x { flex: none; background: none; border: 0; color: inherit; opacity: .6; font-size: 18px; line-height: 1; padding: 6px 10px 6px 6px; cursor: pointer; min-height: 38px; }
+.rtab-x:hover { opacity: 1; }
+.stage.split .rtabs { margin-bottom: 8px; }
