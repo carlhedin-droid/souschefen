@@ -1638,13 +1638,17 @@ function sbLinks(o, dr) {
   const prefs = wine ? [packs.length === 1 && DRINK_PACKS[packs[0]], P.drinkEco && 'ekologiskt'].filter(Boolean) : [];
   // Sortiment som frågeparameter (Systembolaget skriver flera val som "A_eller_B")
   const rangeQ = wine && ranges.length && ranges.length < Object.keys(DRINK_RANGES).length ? 'sortiment=' + ranges.map(r => encodeURIComponent(DRINK_RANGES[r]).replace(/%20/g, '+')).join('_eller_') : '';
-  const url = (segs, q = '', all = false) => { const qs = [q.replace(/^\?/, ''), all ? '' : rangeQ].filter(Boolean).join('&'); return `${SB}/sortiment/${[base, ...segs, ...prefs].filter(Boolean).join('/')}/${qs ? '?' + qs : ''}`; };
+  // Prisintervall från inställningarna (pris per flaska – gäller vin, inte öl och cider)
+  const pf = kr(P.drinkPriceFrom), pt = kr(P.drinkPriceTo);
+  const priceQ = wine && (pf || pt) ? [pf && pt ? `pris-fran=${Math.min(pf, pt)}` : pf ? `pris-fran=${pf}` : '', pf && pt ? `pris-till=${Math.max(pf, pt)}` : pt ? `pris-till=${pt}` : ''].filter(Boolean).join('&') : '';
+  const url = (segs, q = '', all = false) => { const qs = [q.replace(/^\?/, ''), priceQ, all ? '' : rangeQ].filter(Boolean).join('&'); return `${SB}/sortiment/${[base, ...segs, ...prefs].filter(Boolean).join('/')}/${qs ? '?' + qs : ''}`; };
   const cLabel = country ? (COUNTRY_LABEL[country] || country.charAt(0).toUpperCase() + country.slice(1)) : '';
   const rLabel = region ? o.region.trim() : '';
   const where = rLabel || tv(cLabel);
   const tasteL = taste ? tv(TASTE_LABEL[taste]).toLowerCase() : '';
   const mainBits = [tasteL, where].filter(Boolean).map(esc);
-  const main = { url: url([taste, country, region]), label: mainBits.length ? L(`Visa ${mainBits.join(' från ')} på Systembolaget`, `Show ${mainBits.join(' from ')} at Systembolaget`) : L('Visa på Systembolaget', 'Show at Systembolaget') };
+  const priceL = priceQ ? ` (${esc(priceText(P))})` : '';
+  const main = { url: url([taste, country, region]), label: (mainBits.length ? L(`Visa ${mainBits.join(' från ')} på Systembolaget`, `Show ${mainBits.join(' from ')} at Systembolaget`) : L('Visa på Systembolaget', 'Show at Systembolaget')) + priceL };
   const extra = [];
   if (food) extra.push({ url: url([taste, food]), label: L(`Till ${SB_FOOD[food].toLowerCase()}`, `For ${EN_FOOD[SB_FOOD[food]]}`) });
   if (grape) extra.push({ url: url([], `druva=${encodeURIComponent(grape)}`), label: L(`Druva: ${esc(grape)}`, `Grape: ${esc(grape)}`) });
