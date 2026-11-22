@@ -258,6 +258,14 @@ const GIVENS = ['Salt', 'Svartpeppar', 'Strösocker', 'Vetemjöl', 'Neutral olja
 const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
 const isGiven = name => GIVEN_RE.test(fold(name).replace(/\(.*?\)/g, '').replace(/,.*$/, '').replace(/\s+/g, ' ').trim());
 const PANTRY_DEFAULTS = { pantry: [] };
+// Förebilder: receptsajter vi litar på, separat för vardag (snabbt och smart) och helg (ambitiöst)
+const REF_SITES = [['RecipeTin Eats', 'recipetineats.com'], ['Serious Eats', 'seriouseats.com'], ["Marion's Kitchen", 'marionskitchen.com'], ['Köket.se', 'koket.se'],
+  ['ICA Recept', 'ica.se/recept'], ['Ottolenghi', 'ottolenghi.co.uk'], ['The Woks of Life', 'thewoksoflife.com'], ['Rasa Malaysia', 'rasamalaysia.com'], ['Just One Cookbook', 'justonecookbook.com'],
+  ['Bon Appétit', 'bonappetit.com'], ['NYT Cooking', 'cooking.nytimes.com'], ['Jamie Oliver', 'jamieoliver.com'], ['BBC Good Food', 'bbcgoodfood.com']];
+const REF_DEFAULTS = { refWeekday: ['RecipeTin Eats', "Marion's Kitchen", 'Köket.se', 'Just One Cookbook'], refWeekend: ['Serious Eats', 'Ottolenghi', 'The Woks of Life', 'Rasa Malaysia'] };
+// Saknas listan (t.ex. äldre synkad data) gäller förvalen
+const refList = (P, k) => Array.isArray(P[k]) ? P[k] : [...REF_DEFAULTS[k]];
+const refDomain = name => (REF_SITES.find(x => x[0] === name) || [])[1] || (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(name.trim()) ? name.trim() : '');
 const DRINK_DEFAULTS = { drinkPriceFrom: '120', drinkPriceTo: '200', drinkNA: true, drinkWeekday: false, drinkEco: false, drinkLike: [], drinkLikes: '', drinkAvoid: '', drinkPack: [], drinkRange: [] };
 const DRINK_KINDS = ['Rött', 'Vitt', 'Rosé', 'Mousserande', 'Öl', 'Cider'];
 const DRINK_PACKS = { 'Glasflaska': 'glasflaska', 'Box': 'box' };
@@ -277,6 +285,7 @@ const CARL_PREFS = {
   ...BREAD_DEFAULTS,
   ...DRINK_DEFAULTS,
   ...PANTRY_DEFAULTS,
+  ...REF_DEFAULTS,
 };
 // Neutrala förval för nya familjer (fylls i via introduktionen)
 const DEFAULT_PROFILE = '';
@@ -292,12 +301,13 @@ const DEFAULT_PREFS = {
   ...BREAD_DEFAULTS,
   ...DRINK_DEFAULTS,
   ...PANTRY_DEFAULTS,
+  ...REF_DEFAULTS,
 };
 const HAD_DATA = (() => { try { return !!localStorage.getItem('fk.data') || !!(JSON.parse(localStorage.getItem('fk.settings') || '{}').geminiKey); } catch { return false; } })();
 
 const S_STR = { type: 'STRING' }, S_STRN = { type: 'STRING', nullable: true }, S_ARR = { type: 'ARRAY', items: S_STR };
 const RECIPE_CORE_PROPS = {
-  title: S_STR, origin: S_STR, countries: S_ARR, source: S_STRN, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, servings: { type: 'INTEGER' }, intro: S_STR,
+  title: S_STR, titleEn: S_STRN, origin: S_STR, countries: S_ARR, source: S_STRN, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, servings: { type: 'INTEGER' }, intro: S_STR,
   overview: S_ARR, activeTime: S_STRN, ahead: S_STRN,
   ingredients: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, amount: S_STR, name: S_STR, note: S_STRN, group: S_STRN, pantry: { type: 'BOOLEAN' }, staple: { type: 'BOOLEAN' } }, required: ['id', 'amount', 'name'], propertyOrdering: ['id', 'amount', 'name', 'note', 'group', 'pantry', 'staple'] } },
   steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' } }, required: ['title', 'text'], propertyOrdering: ['title', 'text', 'uses', 'minutes', 'optional'] } },
@@ -342,7 +352,7 @@ Du svarar inuti en app. Svara ALLTID med exakt ett JSON-objekt – ingen text f�
   "reply": "Text som visas i chatten. LÄGE 1: hela svaret. Nytt recept eller förslag: högst 1–2 meningar, upprepa INTE innehållet. Ändrat recept: en mening om vad som ändrats. Enkel markdown (**fet**, punktlistor med '- ') är ok.",
   "suggestions": null | [ { "name": "", "origin": "kök/land", "countries": ["MY"], "tag": "VARDAG" | "HELG", "time": "t.ex. 35 min", "difficulty": "Lätt" | "Medel" | "Avancerad", "why": "1–2 meningar om varför den passar oss", "keyIngredients": [""], "equipment": "" | null, "health": "bra" | "neutral" | "mindre bra" (mot hälsomålet), "vegetarian": true|false } ],
   "recipe": null | {
-    "title": "", "origin": "", "countries": ["MY"], "source": "länk till originalet" | null, "tag": "VARDAG" | "HELG", "time": "", "servings": 4, "intro": "1–2 meningar",
+    "title": "", "titleEn": "rättens vanliga namn på engelska (för sökning på internationella receptsajter)", "origin": "", "countries": ["MY"], "source": "länk till originalet" | null, "tag": "VARDAG" | "HELG", "time": "", "servings": 4, "intro": "1–2 meningar",
     "overview": ["Marinera kycklingen", "Stek den i samma panna", "Koka ihop såsen"],
     "activeTime": "40 min" | null, "ahead": "Marinera minst 3 h, gärna över natten" | null,
     "ingredients": [ { "id": "i1", "amount": "300 g", "name": "kycklinglårfilé", "note": "i bitar" | null, "group": "Marinad" | null, "pantry": false, "staple": false } ],
@@ -804,6 +814,7 @@ function prefsText(d) {
 - Standardutrustning (finns alltid): ${STANDARD_KITCHEN}
 - Specialutrustning vi har: ${equip.join(', ') || 'ingen utöver standard'}${breadText(P)}
 - Självklarheter (finns alltid, räkna inte som inköp): ${GIVENS.join(', ')}
+- Förebilder ${d.weekend ? 'på HELG' : 'på VARDAG'}: ${(() => { const l = refList(P, d.weekend ? 'refWeekend' : 'refWeekday'); return l.length ? `${l.join(', ')} – skriv recepten enligt deras metoder, nivå och smaksättning${d.weekend ? '' : ' och håll vardagens omfattning och tidsram'}. Påstå aldrig att ett recept kommer från dem.` : 'inga särskilda'; })()}
 - Skafferiet (det vi har hemma just nu, både basvaror och skafferivaror – använd fritt och räkna inte som inköp): ${pantryOf(P).join(', ') || '(tomt)'}
 - ${d.weekend ? 'Skafferi på HELG: använd fritt det rätten behöver för bästa resultat. Det som inte finns i skafferiet köper vi – sätt "pantry": false på det.' : 'Skafferi på VARDAG: bygg rätten på skafferiet plus vanliga färskvaror som finns i alla butiker (kött, fisk, kyckling, grönsaker, mejeri). Högst EN skafferivara (sås, krydda, konserv, torrvara) som inte finns i skafferiet – och ge då ett alternativ i ingrediensens "note". Gäller även förslagen.'}
 - Dryckestips (bara när vi ber om dem): Pris per flaska: ${(() => { const a = kr(P.drinkPriceFrom), b = kr(P.drinkPriceTo); return a && b ? `${Math.min(a, b)}–${Math.max(a, b)} kr` : b ? `upp till ${b} kr` : a ? `från ${a} kr` : 'valfritt' })()}${P.drinkNA ? '. Ge alltid ett alkoholfritt alternativ' : ''}${drinkArr(P, 'drinkLike').length ? `. Vi dricker helst: ${P.drinkLike.join(', ')} – lägg dem först och föreslå bara annat när maten verkligen kräver det (säg då varför)` : ''}${(P.drinkLikes || '').trim() ? `. Vi gillar: ${P.drinkLikes.trim()}` : ''}${(P.drinkAvoid || '').trim() ? `. Vi undviker: ${P.drinkAvoid.trim()}` : ''}${drinkArr(P, 'drinkRange').length ? `. Vi handlar gärna i: ${P.drinkRange.join(', ')}` : ''}`;
@@ -1613,6 +1624,14 @@ function viewRecipe() {
   </div>`}
   </article>`;
 }
+// Jämför med förebilderna: sök rättens namn hos sajterna (Google-sökning begränsad till sajten)
+function refLinks(r) {
+  const P = S.data.prefs, list = refList(P, String(r.tag).toUpperCase() === 'HELG' ? 'refWeekend' : 'refWeekday');
+  if (!list.length || !r.title) return '';
+  const sv = r.title.replace(/\(.*?\)/g, '').trim(), en = (r.titleEn || '').trim() || sv;
+  const url = n => { const d = refDomain(n), q = /\.se(\/|$)/.test(d) ? sv : en; return `https://www.google.com/search?q=${encodeURIComponent((d ? `site:${d} ` : `${n} `) + q)}`; };
+  return `<div class="r-extra"><h3>${L('Jämför med förebilderna', 'Compare with your inspiration')}</h3><div class="sb-chips">${list.map(n => `<a class="sb-chip" href="${url(n)}" target="_blank" rel="noopener">${esc(n)}</a>`).join('')}</div></div>`;
+}
 // Flikarna Dryck och Mer
 function drinksPane(r) {
   if (S.provisional === r) return `<section class="r-sec"><div class="extras-loading">${potSvg()}<span>${L('Dryckestipsen kommer när receptet är klart…', 'Drink suggestions come when the recipe is done…')}</span></div></section>`;
@@ -1626,6 +1645,7 @@ function morePane(r, saved) {
   const legacy = [...(r.tips || []), ...(r.health?.tips || [])];
   return `<section class="r-sec more" aria-label="${L('Mer', 'More')}">
     ${r.health && (r.health.why || r.health.summary) ? `<div class="r-extra"><h3>${L('Hälsomålet', 'Health goal')}${r.health.rating ? ` – ${esc(healthText(r.health.rating))}` : ''}</h3><p>${esc(r.health.why || r.health.summary)}</p></div>` : ''}
+    ${refLinks(r)}
     ${recipeAfter(r)}
     ${notesSection(r)}
     ${legacy.length ? `<div class="r-extra"><h3>${L('Fler tips', 'More tips')}</h3><ul>${legacy.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
@@ -2337,6 +2357,7 @@ function secSummary(key) {
     case 'equipment': return list([...P.equipment, ...P.customEquipment], L('Vanligt kök', 'Regular kitchen'));
     case 'pantry': { const n = pantryOf(P).length; return n ? L(`${n} basvaror`, `${n} staples`) : L('Tomt', 'Empty'); }
     case 'voice': return voiceMode() === 'ai' ? L(`Googles AI-röst, ${tv(TTS_VOICES.find(v => v[0] === aiVoice())[1]).toLowerCase()}`, `Google AI voice, ${EN_VOICE_DESC[TTS_VOICES.find(v => v[0] === aiVoice())[1]].toLowerCase()}`) : L('Enhetens röst', 'Device voice') + (S.settings.deviceVoice ? `, ${S.settings.deviceVoice}` : '');
+    case 'refs': return `${L('Vardag', 'Weekdays')}: ${refList(P, 'refWeekday').length || 0}, ${L('helg', 'weekends')}: ${refList(P, 'refWeekend').length || 0}`;
     case 'drinks': return priceText(P).replace(/^./, c => c.toUpperCase()) + (P.drinkNA ? L(', alkoholfritt alternativ', ', alcohol-free option') : '') + (P.drinkWeekday ? L(', även vardag', ', weekdays too') : '') + (drinkArr(P, 'drinkLike').length ? ', ' + P.drinkLike.map(tv).join('/').toLowerCase() : '') + (drinkArr(P, 'drinkRange').length ? ', ' + P.drinkRange.map(tv).join('/').toLowerCase() : '') + (drinkArr(P, 'drinkPack').length === 1 ? ', ' + tv(P.drinkPack[0]).toLowerCase() : '') + (P.drinkEco ? L(', ekologiskt', ', organic') : '');
     case 'bread': { const b = [...P.breadLeaven.map(tv), lab(BREAD_OPT.proof, P.breadProof), lab(BREAD_OPT.knead, P.breadKnead), lab(BREAD_OPT.hydration, P.breadHydration), ...P.breadFlour.map(tv), ...P.breadBake.map(tv)].filter(Boolean);
       return b.length ? b.join(', ') : L('Efter receptet', 'Follow the recipe'); }
@@ -2397,6 +2418,15 @@ function prefsSections() {
       <div class="row"><button class="btn" data-invopen>${P.pantryCatalog?.length ? L('Inventera skafferiet', 'Check the pantry') : L('Kom igång – bocka för det ni har', 'Get started – tick what you have')}</button></div>
       ${have.length ? `<h3 class="pantry-h">${L('Ni har', 'You have')} (${have.length})</h3><div class="chips compact">${shown.map(v => `<button type="button" class="chip rm" data-pantryrm="${esc(v)}" aria-label="${L(`Ta bort ${esc(v)}`, `Remove ${esc(v)}`)}">${esc(v)}</button>`).join('')}${have.length > MAX ? `<button type="button" class="chip more" data-pantrymore>${S.pantryAll ? L('Visa färre', 'Show fewer') : L(`+${have.length - MAX} till`, `+${have.length - MAX} more`)}</button>` : ''}</div>
         <p class="hint pantry-tip">${L('Tryck på en vara för att ta bort den.', 'Tap an item to remove it.')}</p>` : ''}`;
+    })()),
+    sec('refs', L('Förebilder', 'Inspiration'), (() => {
+      const block = (key, title, hint) => { const list = refList(P, key), known = REF_SITES.map(x => x[0]), custom = list.filter(x => !known.includes(x));
+        return `<div class="field"><label>${title}</label><span class="hint">${hint}</span>
+        <div class="chips compact">${known.map(n => `<button type="button" class="chip opt" data-reft="${key}|${esc(n)}" aria-pressed="${list.includes(n)}">${esc(n)}</button>`).join('')}${custom.map(n => `<button type="button" class="chip opt" data-reft="${key}|${esc(n)}" aria-pressed="true" title="${L('Tryck för att ta bort', 'Tap to remove')}">${esc(n)} ×</button>`).join('')}</div>
+        <div class="add-row"><input id="refNew-${key}" placeholder="${L('Egen, t.ex. Mob eller sajtens adress', 'Your own, e.g. Mob or the site address')}" aria-label="${title}"><button class="ghost" data-refadd="${key}">${L('Lägg till', 'Add')}</button></div></div>`; };
+      return `<p class="hint ss-lead">${L('Receptsajter ni litar på. Souschefen skriver recepten enligt deras metoder och nivå, och under Mer i receptet finns länkar för att jämföra med deras version.', 'Recipe sites you trust. The sous-chef writes recipes following their methods and level, and under More in the recipe there are links to compare with their version.')}</p>
+        ${block('refWeekday', L('Vardag', 'Weekdays'), L('Snabbt och smart – håller vardagens tidsram.', 'Quick and smart – keeps to the weekday time frame.'))}
+        ${block('refWeekend', L('Helg', 'Weekends'), L('Ambitiöst – teknik och maxad smak.', 'Ambitious – technique and maximum flavour.'))}`;
     })()),
     sec('drinks', L('Dryck', 'Drinks'), `
       <p class="hint ss-lead">${L('Souschefen föreslår vilken typ av dryck som passar till helgens recept, med länkar till Systembolagets sortiment.', 'The sous-chef suggests what kind of drink suits weekend recipes, with links to Systembolaget\'s range.')}</p>
@@ -2742,6 +2772,10 @@ $('#stage').addEventListener('click', async e => {
   if (pt) { const k = pt.dataset.ptoggle, v = pt.dataset.val, P = S.data.prefs; P[k] = P[k].includes(v) ? P[k].filter(x => x !== v) : [...P[k], v]; pt.setAttribute('aria-pressed', P[k].includes(v)); prefsChanged(); return; }
   const ps = t.closest('[data-pset]');
   if (ps) { S.data.prefs[ps.dataset.pset] = ps.dataset.val; ps.parentElement.querySelectorAll('[data-pset]').forEach(b => b.setAttribute('aria-pressed', b === ps)); prefsChanged(); return; }
+  const rft = t.closest('[data-reft]');
+  if (rft) { const [key, name] = rft.dataset.reft.split('|'); const P = S.data.prefs, l = refList(P, key); P[key] = l.includes(name) ? l.filter(x => x !== name) : [...l, name]; prefsChanged(); keepScroll(renderStage); return; }
+  const rfa = t.closest('[data-refadd]');
+  if (rfa) { const key = rfa.dataset.refadd, el = document.getElementById('refNew-' + key), v = (el?.value || '').trim(); if (v) { const P = S.data.prefs, l = refList(P, key); if (!l.some(x => fold(x) === fold(v))) P[key] = [...l, v]; prefsChanged(); keepScroll(renderStage); } return; }
   const pb = t.closest('[data-pbool]');
   if (pb) { const k = pb.dataset.pbool; S.data.prefs[k] = !S.data.prefs[k]; pb.setAttribute('aria-pressed', S.data.prefs[k]); prefsChanged(); return; }
   const pp = t.closest('[data-portions]');
