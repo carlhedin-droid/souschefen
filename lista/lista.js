@@ -70,7 +70,7 @@
   const GROCERY_NAME = /^(mat|maten|matvaror|mataffar(en)?|matbutik(en)?|livsmedel|groceries|grocery|food|ica|coop|willys|hemkop|lidl|city gross|citygross|mathem|matsmart|tempo|netto)\b/;
   const isGrocery = l => !!l && (l.kind ? l.kind === 'grocery' : GROCERY_NAME.test(fold(l.name)));
   // Självklarheter visas aldrig i skafferiet (samma lista som i Souschefen)
-  const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|gul lok|gula lokar|lok|lokar|vitlok|vitloksklyfta|vitloksklyftor|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
+  const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
   const isGiven = x => GIVEN_RE.test(fold(x).replace(/\(.*?\)/g, '').replace(/,.*$/, '').trim());
   // Avdelningar i ungefär den ordning man går i en svensk butik. Regler prövas i PRIO-ordning (mest specifika först).
   const DEPTS = [
@@ -115,13 +115,20 @@
     lines.map(parseLine).filter(x => x.text).forEach((x, k) => {
       const ex = open[fold(x.text)];
       if (ex) { if (x.qty) batch.update(fam('items').doc(ex.id), { qty: [ex.qty, x.qty].filter(Boolean).join(' + '), updatedAt: t0 }); }
-      else { const ref = fam('items').doc(); batch.set(ref, { listId: S.listId, text: x.text, qty: x.qty, recipe: extra.recipe || '', done: false, addedAt: t0 + k, addedBy: who }); open[fold(x.text)] = { id: ref.id, ...x }; }
+      else { const ref = fam('items').doc(); batch.set(ref, { listId: S.listId, text: x.text, qty: x.qty, recipe: extra.recipe || '', done: false, addedAt: t0 + k, addedBy: who, ...(extra.stock ? { stock: true } : {}) }); open[fold(x.text)] = { id: ref.id, ...x }; }
       n++;
     });
     batch.commit().catch(onErr);   // offline: köas och skickas när täckningen kommer
     return n;
   }
-  function toggle(id) { const i = S.items.find(x => x.id === id); if (!i) return; fam('items').doc(id).update({ done: !i.done, doneAt: Date.now() }).catch(onErr); }
+  // Skafferivaror som handlas läggs i en kö som Souschefen tar in i skafferiet
+  function toggle(id) {
+    const i = S.items.find(x => x.id === id); if (!i) return;
+    const b = db.batch();
+    b.update(fam('items').doc(id), { done: !i.done, doneAt: Date.now() });
+    if (!i.done && i.stock) b.set(fam('items').doc(), { listId: '__pantry', text: i.text, done: false, addedAt: Date.now() });
+    b.commit().catch(onErr);
+  }
   function removeItem(id) { fam('items').doc(id).delete().catch(onErr); }
   function clearDone() { const b = db.batch(); S.items.filter(i => i.listId === S.listId && i.done).forEach(i => b.delete(fam('items').doc(i.id))); b.commit().catch(onErr); }
   function deleteList(id) {
@@ -225,7 +232,7 @@
     const pr = t.closest('[data-preset]'); if (pr) { S.panel = ''; createList(pr.dataset.preset); render(); return; }
     if (t.closest('[data-dellist]')) { deleteList(S.listId); return; }
     const kd = t.closest('[data-kind]'); if (kd) { setKind(S.listId, kd.checked); return; }
-    const pa = t.closest('[data-pantry]'); if (pa) { if (pa.getAttribute('aria-pressed') !== 'true') { addItems([pa.dataset.pantry], { recipe: L('Skafferiet', 'Pantry') }); } return; }
+    const pa = t.closest('[data-pantry]'); if (pa) { if (pa.getAttribute('aria-pressed') !== 'true') { addItems([pa.dataset.pantry], { recipe: L('Skafferiet', 'Pantry'), stock: true }); } return; }
     const tg = t.closest('[data-toggle]'); if (tg) { toggle(tg.dataset.toggle); return; }
     const dl = t.closest('[data-del]'); if (dl) { removeItem(dl.dataset.del); return; }
     if (t.closest('[data-showdone]')) { S.showDone = !S.showDone; render(); return; }

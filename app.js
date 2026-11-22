@@ -254,8 +254,8 @@ function priceText(P) {
 }
 // Skafferiet: basvaror som INTE är självklara (kokosmjölk, sesamolja, fisksås …), föreslås utifrån favoritländerna.
 // Självklarheterna (salt, socker, mjöl, matolja, smör, lök …) finns alltid, räknas aldrig som inköp och visas inte i skafferiet.
-const GIVENS = ['Salt', 'Svartpeppar', 'Strösocker', 'Vetemjöl', 'Neutral olja', 'Olivolja', 'Smör', 'Gul lök', 'Vitlök', 'Buljong', 'Japansk soja', 'Vinäger', 'Vatten'];
-const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|gul lok|gula lokar|lok|lokar|vitlok|vitloksklyfta|vitloksklyftor|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
+const GIVENS = ['Salt', 'Svartpeppar', 'Strösocker', 'Vetemjöl', 'Neutral olja', 'Olivolja', 'Smör', 'Buljong', 'Japansk soja', 'Vinäger', 'Vatten'];
+const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
 const isGiven = name => GIVEN_RE.test(fold(name).replace(/\(.*?\)/g, '').replace(/,.*$/, '').replace(/\s+/g, ' ').trim());
 const PANTRY_DEFAULTS = { pantry: [] };
 const DRINK_DEFAULTS = { drinkPriceFrom: '120', drinkPriceTo: '200', drinkNA: true, drinkWeekday: false, drinkEco: false, drinkLike: [], drinkLikes: '', drinkAvoid: '', drinkPack: [], drinkRange: [] };
@@ -299,7 +299,7 @@ const S_STR = { type: 'STRING' }, S_STRN = { type: 'STRING', nullable: true }, S
 const RECIPE_CORE_PROPS = {
   title: S_STR, origin: S_STR, countries: S_ARR, source: S_STRN, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, servings: { type: 'INTEGER' }, intro: S_STR,
   overview: S_ARR, activeTime: S_STRN, ahead: S_STRN,
-  ingredients: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, amount: S_STR, name: S_STR, note: S_STRN, group: S_STRN, pantry: { type: 'BOOLEAN' } }, required: ['id', 'amount', 'name'], propertyOrdering: ['id', 'amount', 'name', 'note', 'group', 'pantry'] } },
+  ingredients: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, amount: S_STR, name: S_STR, note: S_STRN, group: S_STRN, pantry: { type: 'BOOLEAN' }, staple: { type: 'BOOLEAN' } }, required: ['id', 'amount', 'name'], propertyOrdering: ['id', 'amount', 'name', 'note', 'group', 'pantry', 'staple'] } },
   steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' }, howTo: S_STRN }, required: ['title', 'text'], propertyOrdering: ['title', 'text', 'uses', 'minutes', 'optional', 'howTo'] } },
   health: { type: 'OBJECT', nullable: true, properties: { summary: S_STR, tips: S_ARR } },
   tips: S_ARR,
@@ -348,7 +348,7 @@ Du svarar inuti en app. Svara ALLTID med exakt ett JSON-objekt – ingen text f�
     "title": "", "origin": "", "countries": ["MY"], "source": "länk till originalet" | null, "tag": "VARDAG" | "HELG", "time": "", "servings": 4, "intro": "1–2 meningar",
     "overview": ["Marinera kycklingen", "Stek den i samma panna", "Koka ihop såsen"],
     "activeTime": "40 min" | null, "ahead": "Marinera minst 3 h, gärna över natten" | null,
-    "ingredients": [ { "id": "i1", "amount": "300 g", "name": "kycklinglårfilé", "note": "i bitar" | null, "group": "Marinad" | null, "pantry": false } ],
+    "ingredients": [ { "id": "i1", "amount": "300 g", "name": "kycklinglårfilé", "note": "i bitar" | null, "group": "Marinad" | null, "pantry": false, "staple": false } ],
     "steps": [ { "title": "Bryn kycklingen", "text": "Bryn 300 g kycklinglårfilé ...", "uses": ["i1"], "minutes": 8 | null, "optional": false, "howTo": "how to sear chicken thighs" | null } ],
     "health": { "summary": "≈45 g protein och 650 kcal per portion. …", "tips": ["konkret byte för den som vill äta lättare"] },
     "tips": [""]
@@ -362,6 +362,7 @@ Regler:
   - "overview": 2–3 korta rader om hur rätten görs, i ordning.
   - "activeTime": tid vid spisen. "time" är total tid inklusive väntan. "ahead": det som måste göras i förväg (marinering, blötläggning, deg som jäser, vila) med minsta och bästa tid, annars null.
   - "pantry": true om ingrediensen finns i SKAFFERIET (även med annat namn, t.ex. "rapsolja" = Neutral olja) eller är en SJÄLVKLARHET (se nedan, t.ex. salt, socker, matolja, smör, lök). Annars false.
+  - "staple": true för skafferi- och basvaror som brukar finnas hemma och håller ett tag (torrvaror, kryddor, såser, konserver, oljor, basgrönsaker som lök, vitlök, morot, selleri, citron, ingefära) – även om vi inte har dem. false för huvudråvaror som kött, fisk och färska örter.
   - "optional": true för steg som går att hoppa över utan att rätten faller (garnering, mixning, rostning av extra topping).
   - "howTo": för 1–3 tekniska moment som är lättare att se än att läsa (vika dumplings, filea fisk, temperera choklad, knåda deg): en kort YouTube-sökterm PÅ ENGELSKA. Annars null.
 - Varje steg har "title": 2–4 ord i imperativ som namnger momentet, t.ex. "Förbered grönsakerna", "Montera lasagnen", "Grädda i ugnen". Upprepa inte rubriken i "text". Även vid renskrivning.
@@ -484,7 +485,15 @@ function migrateData() {
   if (S.data.profile === DEFAULT_PROFILE_V2 || S.data.profile === PROFILE_V3) S.data.profile = CARL_PROFILE;
   else if (S.data.profile && !/Malaysia|foodie/i.test(S.data.profile) && !S.data.prefs.foodieAdded) { S.data.profile = S.data.profile.trim() + '\n' + FOODIE_LINE; }
   S.data.prefs.foodieAdded = true;
+  pantryV2(S.data.prefs);
   if (S.data.profile === LEGACY_PROFILE) S.data.profile = CARL_PROFILE;
+}
+// Skafferi v2: basvaror (lök, vitlök m.m.) hör till skafferiet. Befintliga familjer får lök och vitlök inlagda en gång.
+function pantryV2(P) {
+  if (!P || P.pantryV2) return;
+  const list = Array.isArray(P.pantry) ? P.pantry : [];  // pantryOf()/fold() är inte definierade än här
+  ['Gul lök', 'Vitlök'].forEach(x => { if (!list.some(y => String(y).toLowerCase().trim() === x.toLowerCase())) list.push(x); });  // fold() finns inte än här
+  P.pantry = list; P.pantryV2 = true;
 }
 migrateData();
 if (!S.current) S.current = { suggestions: null, suggIntro: '', recipe: null, recipeSavedId: null, dirty: false };
@@ -781,7 +790,8 @@ function prefsText(d) {
 - Standardutrustning (finns alltid): ${STANDARD_KITCHEN}
 - Specialutrustning vi har: ${equip.join(', ') || 'ingen utöver standard'}${breadText(P)}
 - Självklarheter (finns alltid, räkna inte som inköp): ${GIVENS.join(', ')}
-- Skafferiet (har vi också alltid hemma, använd fritt och räkna inte som inköp): ${pantryOf(P).join(', ') || '(tomt)'}
+- Skafferiet (det vi har hemma just nu, både basvaror och skafferivaror – använd fritt och räkna inte som inköp): ${pantryOf(P).join(', ') || '(tomt)'}
+- ${d.weekend ? 'Skafferi på HELG: använd fritt det rätten behöver för bästa resultat. Det som inte finns i skafferiet köper vi – sätt "pantry": false på det.' : 'Skafferi på VARDAG: bygg rätten på skafferiet plus vanliga färskvaror som finns i alla butiker (kött, fisk, kyckling, grönsaker, mejeri). Högst EN skafferivara (sås, krydda, konserv, torrvara) som inte finns i skafferiet – och ge då ett alternativ i "tips". Gäller även förslagen.'}
 - Dryckestips: ${d.weekend || P.drinkWeekday ? `JA – fyll "drinks" i varje recept. Pris per flaska: ${(() => { const a = kr(P.drinkPriceFrom), b = kr(P.drinkPriceTo); return a && b ? `${Math.min(a, b)}–${Math.max(a, b)} kr` : b ? `upp till ${b} kr` : a ? `från ${a} kr` : 'valfritt' })()}${P.drinkNA ? '. Ge alltid ett alkoholfritt alternativ' : ''}${drinkArr(P, 'drinkLike').length ? `. Vi dricker helst: ${P.drinkLike.join(', ')} – lägg dem först och föreslå bara annat när maten verkligen kräver det (säg då varför)` : ''}${(P.drinkLikes || '').trim() ? `. Vi gillar: ${P.drinkLikes.trim()}` : ''}${(P.drinkAvoid || '').trim() ? `. Vi undviker: ${P.drinkAvoid.trim()}` : ''}${drinkArr(P, 'drinkRange').length ? `. Vi handlar gärna i: ${P.drinkRange.join(', ')}` : ''}` : 'nej – sätt "drinks" till null om vi inte ber om det'}`;
 }
 function stripRecipe(r) {
@@ -1056,7 +1066,7 @@ function normalizeRecipe(r) {
   const arr = x => Array.isArray(x) ? x : [];
   const str = x => typeof x === 'string' && x.trim() && !/^(null|none|n\/a)$/i.test(x.trim()) ? x.trim() : null;
   r.ingredients = r.ingredients.map((x, i) => ({ id: String(x.id || `i${i + 1}`), amount: x.amount || '', name: x.name || '', note: x.note || '', group: x.group || '',
-    pantry: x.pantry === true,
+    pantry: x.pantry === true, staple: x.staple === true,
     swaps: arr(x.swaps).filter(w => w && str(w.name)).slice(0, 3).map(w => ({ name: str(w.name), amount: str(w.amount), why: str(w.why) || '' })) }));
   r.steps = r.steps.map(s => typeof s === 'string' ? { text: s, uses: [], minutes: null } :
     { title: str(s.title), text: s.text || '', uses: Array.isArray(s.uses) ? s.uses.map(String) : [], minutes: Number(s.minutes) > 0 ? Number(s.minutes) : null, optional: s.optional === true, howTo: str(s.howTo) });
@@ -1671,6 +1681,110 @@ Svara ENDAST med JSON: {"groups":[{"group":"${L('Thailand', 'Thailand')}","items
   } catch (e) { S.pantryErr = e.message || String(e); }
   finally { S.pantryBusy = false; keepScroll(renderStage); }
 }
+/* ---------- Inventering av skafferiet ---------- */
+// Katalogen (grupper med varor) skapas en gång utifrån favoritköken och sparas i inställningarna, så inventeringen går snabbt
+async function buildPantryCatalog() {
+  const P = S.data.prefs;
+  const o = await geminiJSON(`Gör en checklista för att inventera skafferi, kyl och frys hos en svensk familj som lagar mat från: ${P.cuisines.join(', ') || 'Sverige'}.
+Utrustning: ${[...P.equipment, ...P.customEquipment].join(', ') || 'vanligt kök'}.
+Grupper i denna ordning:
+1. "Basvaror" – frukt, grönt och kylvaror man brukar ha hemma och som håller en vecka eller mer: t.ex. gul lök, rödlök, vitlök, morot, stjälkselleri, potatis, citron, lime, ingefära, ägg, grädde, parmesan. 10–14 st.
+2. "Torrvaror" – pasta, ris, nudlar, bönor, linser, mjöl utöver vetemjöl m.m. 8–12 st.
+3. "Kryddor" – torkade kryddor. 10–14 st.
+4. "Såser, oljor och konserver" – 8–12 st.
+5. En grupp per kök ovan (gruppnamn = landet) med det som är typiskt för det köket och inte redan finns i grupperna ovan. 5–8 st per kök.
+Bara sådant man har hemma i förväg, inte huvudråvaror som kött och fisk. Ta INTE med självklarheter: ${GIVENS.join(', ')}, mjölk.
+Namn ${L('på svenska som de heter i en svensk butik', 'in English')}, korta (t.ex. "Fisksås", "Kokosmjölk").
+Svara ENDAST med JSON: {"groups":[{"group":"Basvaror","items":["Gul lök"]}]}`, { kind: 'skafferi', fast: true });
+  const seen = new Set();
+  return (Array.isArray(o.groups) ? o.groups : []).map(g => ({ group: String(g.group || '').trim(), items: (Array.isArray(g.items) ? g.items : []).map(x => String(x).trim())
+    .filter(x => x && !isGiven(x) && !seen.has(fold(x)) && seen.add(fold(x))) })).filter(g => g.group && g.items.length);
+}
+async function openInventory() {
+  const P = S.data.prefs;
+  S.inv = { open: true, busy: !P.pantryCatalog?.length, err: '', removed: [], initial: new Set(pantryOf(P).map(fold)) };
+  keepScroll(renderStage);
+  absorbPantry();
+  if (P.pantryCatalog?.length) return;
+  try { P.pantryCatalog = await buildPantryCatalog(); prefsChanged(true); }
+  catch (e) { S.inv.err = e.message || String(e); }
+  S.inv.busy = false; keepScroll(renderStage);
+}
+function invGroups() {
+  const P = S.data.prefs, cat = P.pantryCatalog || [], inCat = new Set(cat.flatMap(g => g.items.map(fold)));
+  const extra = [...pantryOf(P), ...(S.inv?.removed || [])].filter((x, k, arr) => !inCat.has(fold(x)) && arr.findIndex(y => fold(y) === fold(x)) === k);
+  return [...cat, ...(extra.length ? [{ group: L('Övrigt ni har', 'Other things you have'), items: extra }] : [])];
+}
+function inventorySheet() {
+  const iv = S.inv, have = new Set(pantryOf(S.data.prefs).map(fold)), groups = invGroups();
+  const n = have.size;
+  return `<div class="sheet-backdrop" data-invclose></div>
+  <div class="sheet inv-sheet" role="dialog" aria-modal="true" aria-labelledby="invTitle">
+    <div class="sheet-head"><h2 id="invTitle">${L('Inventera skafferiet', 'Pantry check')}</h2><button class="icon-btn" data-invclose aria-label="${L('Stäng', 'Close')}">✕</button></div>
+    <p class="muted sheet-sub">${L('Gröna = har hemma. Tryck för att ändra. Allt sparas direkt.', 'Green = at home. Tap to change. Everything saves right away.')}</p>
+    <div class="sheet-body">
+      ${iv.busy ? `<div class="extras-loading">${potSvg()}<span>${L('Souschefen gör en checklista utifrån era favoritkök…', 'The sous-chef is making a checklist from your favourite cuisines…')}</span></div>` : ''}
+      ${iv.err ? `<p class="wine-err">${esc(iv.err)}</p><button class="ghost" data-invretry>${L('Försök igen', 'Try again')}</button>` : ''}
+      ${groups.map((g, gi) => { const all = g.items.every(x => have.has(fold(x)));
+        return `<div class="inv-group"><div class="pantry-g"><h3>${esc(g.group)}</h3><button type="button" class="linkish" data-invall="${gi}">${all ? L('Inget', 'None') : L('Har allt', 'Have all')}</button></div>
+        <div class="chips compact">${g.items.map(v => `<button type="button" class="chip opt" data-invt="${esc(v)}" aria-pressed="${have.has(fold(v))}">${esc(v)}</button>`).join('')}</div></div>`; }).join('')}
+      ${!iv.busy ? `<div class="add-row"><input id="invNew" placeholder="${L('Saknas något? T.ex. Gochujang', 'Missing something? E.g. Gochujang')}" aria-label="${L('Lägg till vara', 'Add item')}"><button class="ghost" data-invadd>${L('Lägg till', 'Add')}</button></div>
+      ${P_catalogNote()}` : ''}
+    </div>
+    <div class="sheet-foot">
+      ${iv.removed.length ? `<button class="btn" data-invshop>${L(`Lägg ${iv.removed.length} som är slut på inköpslistan`, `Put ${iv.removed.length} run-out items on the shopping list`)}</button>` : ''}
+      <button class="${iv.removed.length ? 'ghost' : 'btn'}" data-invclose>${L(`Klar – ${n} varor hemma`, `Done – ${n} items at home`)}</button>
+    </div>
+  </div>`;
+}
+function P_catalogNote() {
+  return S.data.prefs.pantryCatalog?.length ? `<p class="hint">${L('Har ni ändrat favoritkök?', 'Changed your favourite cuisines?')} <button class="linkish" data-invrebuild>${L('Gör en ny checklista', 'Make a new checklist')}</button></p>` : '';
+}
+function invToggle(v, on) {
+  const P = S.data.prefs, has = pantryOf(P).some(x => fold(x) === fold(v));
+  if (on === undefined) on = !has;
+  if (on === has) return;
+  pantryToggle(v, on);
+  const iv = S.inv; if (!iv) return;
+  if (on) iv.removed = iv.removed.filter(x => fold(x) !== fold(v));
+  else if (iv.initial.has(fold(v))) iv.removed.push(v);
+  keepScroll(renderStage);
+}
+// Det som fanns i skafferiet när inventeringen öppnades och bockas ur räknas som "slut"
+async function invToShop() {
+  const iv = S.inv; if (!iv?.removed.length) return;
+  if (!window.Cloud?.active() || !Cloud.state.fid) { toast(L('Inköpslistan kräver familjekontot (Inställningar → Konto och familj).', 'The shopping list needs the family account (Settings → Account and family).')); return; }
+  try {
+    const lists = (await famCol('lists').get()).docs.map(d => ({ id: d.id, ...d.data() }));
+    const list = lists.find(l => l.id === LS.get('fk.shopList', '') && isGroceryList(l)) || lists.find(isGroceryList) || lists[0];
+    let listId = list?.id;
+    if (!listId) { const ref = famCol('lists').doc(); await ref.set({ name: L('Mat', 'Groceries'), kind: 'grocery', order: 0, createdAt: Date.now() }); listId = ref.id; }
+    const open = new Set(); (await famCol('items').where('listId', '==', listId).get()).forEach(d => { const x = d.data(); if (!x.done) open.add(fold(x.text)); });
+    const batch = Cloud.state.db.batch(), t0 = Date.now(), who = Cloud.state.user?.displayName || Cloud.state.user?.email || '';
+    const todo = iv.removed.filter(x => !open.has(fold(x)));
+    todo.forEach((x, k) => batch.set(famCol('items').doc(), { listId, text: x, qty: '', recipe: L('Skafferiet', 'Pantry'), done: false, addedAt: t0 + k, addedBy: who, stock: true }));
+    await batch.commit();
+    toast(L(`${iv.removed.length} varor på inköpslistan. De kommer tillbaka i skafferiet när ni bockar av dem.`, `${iv.removed.length} items on the shopping list. They return to the pantry when you tick them off.`), 4000);
+    iv.removed = []; keepScroll(renderStage);
+  } catch (e) { toast(L('Kunde inte lägga till: ', 'Could not add: ') + (e.message || e)); }
+}
+// Lär av inköpen: skafferivaror som bockats av i inköpslistan läggs i skafferiet (inköpslistan lämnar dem i en kö)
+async function absorbPantry() {
+  if (!window.Cloud?.active() || !Cloud.state.fid || absorbPantry.busy) return;
+  absorbPantry.busy = true;
+  try {
+    const q = await famCol('items').where('listId', '==', '__pantry').get();
+    if (q.empty) return;
+    const P = S.data.prefs, batch = Cloud.state.db.batch(), added = [];
+    q.forEach(d => { const t = String(d.data().text || '').trim(); batch.delete(d.ref);
+      if (t && !isGiven(t) && !pantryOf(P).some(x => fold(x) === fold(t)) && !added.some(x => fold(x) === fold(t))) added.push(t); });
+    await batch.commit();
+    if (added.length) { P.pantry = [...pantryOf(P), ...added]; prefsChanged(true); toast(L(`Nytt i skafferiet: ${added.join(', ')}`, `New in the pantry: ${added.join(', ')}`), 4000); if (S.route.view === 'settings' || S.inv?.open) keepScroll(renderStage); }
+  } catch (e) { console.warn('Skafferiet', e); }
+  finally { absorbPantry.busy = false; }
+}
+window.absorbPantry = absorbPantry;
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') absorbPantry(); });
 function pantryToggle(v, on) {
   const P = S.data.prefs, list = pantryOf(P), k = fold(v), has = list.some(x => fold(x) === k);
   if (on === undefined) on = !has;
@@ -1691,7 +1805,7 @@ function isPantryIng(i) {
   return pantryOf(S.data.prefs).some(p => { const q = fold(p); return q.length >= 3 && (n === q || n.includes(q) || (n.length >= 4 && q.includes(n))); });
 }
 function shopRows(r, f) {
-  return r.ingredients.map(i => ({ id: i.id, name: i.name.trim(), qty: scaleAmount(i.amount, f), have: isPantryIng(i) }));
+  return r.ingredients.map(i => ({ id: i.id, name: i.name.trim(), qty: scaleAmount(i.amount, f), have: isPantryIng(i), stock: !!i.staple || isPantryIng(i) }));
 }
 const famCol = name => Cloud.state.db.collection('families').doc(Cloud.state.fid).collection(name);
 async function openShop() {
@@ -1741,7 +1855,7 @@ async function addToShop() {
     rows.forEach((x, k) => {
       const ex = existing[fold(x.name)];
       if (ex) { merged++; batch.update(ex.ref, { qty: [ex.qty, x.qty].filter(Boolean).join(' + '), recipe: ex.recipe && ex.recipe !== r.title ? `${ex.recipe}, ${r.title}` : r.title, updatedAt: now0 }); }
-      else batch.set(col.doc(), { listId: sh.listId, text: x.name, qty: x.qty || '', recipe: r.title, done: false, addedAt: now0 + k, addedBy: who });
+      else batch.set(col.doc(), { listId: sh.listId, text: x.name, qty: x.qty || '', recipe: r.title, done: false, addedAt: now0 + k, addedBy: who, ...(x.stock && !isGiven(x.name) ? { stock: true } : {}) });
     });
     await batch.commit();
     LS.set('fk.shopList', sh.listId);
@@ -2143,21 +2257,11 @@ function prefsSections() {
       <div class="add-row"><input id="equipNew" placeholder="${L('Lägg till egen, t.ex. Plancha', 'Add your own, e.g. Plancha')}" aria-label="${L('Egen utrustning', 'Your own equipment')}"><button class="ghost" data-equipadd>${L('Lägg till', 'Add')}</button></div>`),
     sec('pantry', L('Skafferiet', 'Pantry'), (() => {
       const have = pantryOf(P), MAX = 12, shown = S.pantryAll ? have : have.slice(0, MAX);
-      const sugg = (S.pantrySugg || []).map((g, gi) => ({ ...g, gi, items: g.items.filter(v => !have.some(x => fold(x) === fold(v))) })).filter(g => g.items.length);
       return `
-      <p class="hint ss-lead">${L('Det ni <b>alltid har hemma</b> utöver salt, socker och annat självklart. Souschefen räknar med det i recepten, och det hamnar inte bland "Att handla" i inköpslistan.', 'What you <b>always have at home</b> beyond salt, sugar and other obvious things. The sous-chef counts on it in recipes, and it is not put under "To buy" in the shopping list.')}</p>
-      <h3 class="pantry-h">${L('Ni har', 'You have')} (${have.length})</h3>
-      ${have.length ? `<div class="chips compact">${shown.map(v => `<button type="button" class="chip rm" data-pantryrm="${esc(v)}" aria-label="${L(`Ta bort ${esc(v)}`, `Remove ${esc(v)}`)}">${esc(v)}</button>`).join('')}${have.length > MAX ? `<button type="button" class="chip more" data-pantrymore>${S.pantryAll ? L('Visa färre', 'Show fewer') : L(`+${have.length - MAX} till`, `+${have.length - MAX} more`)}</button>` : ''}</div>
-        <p class="hint pantry-tip">${L('Tryck på en vara för att ta bort den.', 'Tap an item to remove it.')}</p>` : `<p class="muted pantry-tip">${L('Inget än. Skriv nedan eller låt souschefen föreslå.', 'Nothing yet. Type below or let the sous-chef suggest.')}</p>`}
-      <div class="add-row"><input id="pantryNew" placeholder="${L('Lägg till, t.ex. Fisksås', 'Add, e.g. Fish sauce')}" aria-label="${L('Ny basvara', 'New staple')}"><button class="ghost" data-pantryadd>${L('Lägg till', 'Add')}</button></div>
-      <div class="pantry-suggest">
-        ${sugg.length ? `<div class="pantry-sugg">
-          <div class="pantry-sugg-head"><h3 class="pantry-h">${L('Förslag – tryck på det ni brukar ha hemma', 'Suggestions – tap what you usually have')}</h3><button type="button" class="ghost small" data-pantryclose>${L('Klar', 'Done')}</button></div>
-          ${sugg.map(g => `<div class="opt-group"><div class="pantry-g"><h3>${esc(g.group)}</h3><button type="button" class="linkish" data-pantryallg="${g.gi}">${L('Lägg till alla', 'Add all')}</button></div>
-            <div class="chips compact">${g.items.map(v => `<button type="button" class="chip add" data-pantrypick="${esc(v)}">${esc(v)}</button>`).join('')}</div></div>`).join('')}
-        </div>` : `<button class="ghost" data-pantrysuggest ${S.pantryBusy ? 'disabled' : ''}>${S.pantryBusy ? L('Tänker…', 'Thinking…') : L('✨ Föreslå utifrån våra favoritländer', '✨ Suggest from our favourite countries')}</button>`}
-        ${S.pantryErr ? `<p class="wine-err">${esc(S.pantryErr)}</p>` : ''}
-      </div>`;
+      <p class="hint ss-lead">${L('Det ni har hemma: basvaror som lök och morot, kryddor, såser och torrvaror. På vardagar bygger recepten på skafferiet. På helgen får de innehålla mer, och det ni saknar hamnar på inköpslistan. Skafferivaror ni bockar av i inköpslistan läggs till här automatiskt.', 'What you have at home: basics like onion and carrot, spices, sauces and dry goods. On weekdays recipes build on the pantry. At weekends they can include more, and what you lack goes on the shopping list. Pantry items you tick off in the shopping list are added here automatically.')}</p>
+      <div class="row"><button class="btn" data-invopen>${have.length ? L('Inventera skafferiet', 'Check the pantry') : L('Kom igång – bocka för det ni har', 'Get started – tick what you have')}</button></div>
+      ${have.length ? `<h3 class="pantry-h">${L('Ni har', 'You have')} (${have.length})</h3><div class="chips compact">${shown.map(v => `<button type="button" class="chip rm" data-pantryrm="${esc(v)}" aria-label="${L(`Ta bort ${esc(v)}`, `Remove ${esc(v)}`)}">${esc(v)}</button>`).join('')}${have.length > MAX ? `<button type="button" class="chip more" data-pantrymore>${S.pantryAll ? L('Visa färre', 'Show fewer') : L(`+${have.length - MAX} till`, `+${have.length - MAX} more`)}</button>` : ''}</div>
+        <p class="hint pantry-tip">${L('Tryck på en vara för att ta bort den.', 'Tap an item to remove it.')}</p>` : ''}`;
     })()),
     sec('drinks', L('Dryck', 'Drinks'), `
       <p class="hint ss-lead">${L('Souschefen föreslår vilken typ av dryck som passar till helgens recept, med länkar till Systembolagets sortiment.', 'The sous-chef suggests what kind of drink suits weekend recipes, with links to Systembolaget\'s range.')}</p>
@@ -2297,7 +2401,7 @@ function viewSettings() {
       <div class="row"><button class="ghost" data-showwelcome>${L('Visa introduktionen igen', 'Show the introduction again')}</button>
         <button class="ghost" data-export>${L('Ladda ner säkerhetskopia', 'Download backup')}</button>
         <label class="ghost">${L('Läs in säkerhetskopia', 'Restore backup')}<input type="file" accept="application/json" id="importFile" hidden></label></div>`;
-  return `<section class="settings">
+  return `${S.inv?.open ? inventorySheet() : ''}<section class="settings">
     <h1>${L('Inställningar', 'Settings')}</h1>
     <h2 class="set-group">${L('Matlagning', 'Cooking')}</h2>
     <div class="set-list">
@@ -2407,6 +2511,13 @@ $('#stage').addEventListener('click', async e => {
     keepScroll(renderStage); return; }
   const shs = t.closest('[data-shopsel]'); if (shs) { S.shop.sel[shs.dataset.shopsel] = shs.checked; keepScroll(renderStage); return; }
   if (t.closest('[data-shopadd]')) { addToShop(); return; }
+  if (t.closest('[data-invopen]')) { openInventory(); return; }
+  if (t.closest('[data-invclose]')) { S.inv = null; keepScroll(renderStage); absorbPantry(); return; }
+  if (t.closest('[data-invretry]') || t.closest('[data-invrebuild]')) { S.data.prefs.pantryCatalog = null; openInventory(); return; }
+  const ivt = t.closest('[data-invt]'); if (ivt) { invToggle(ivt.dataset.invt); return; }
+  const iva = t.closest('[data-invall]'); if (iva) { const g = invGroups()[+iva.dataset.invall]; if (g) { const have = new Set(pantryOf(S.data.prefs).map(fold)), all = g.items.every(x => have.has(fold(x))); g.items.forEach(x => invToggle(x, !all)); } return; }
+  if (t.closest('[data-invadd]')) { const el = $('#invNew'); (el?.value || '').split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => invToggle(x, true)); return; }
+  if (t.closest('[data-invshop]')) { invToShop(); return; }
   const prm = t.closest('[data-pantryrm]'); if (prm) { pantryToggle(prm.dataset.pantryrm, false); return; }
   const ppk = t.closest('[data-pantrypick]'); if (ppk) { pantryToggle(ppk.dataset.pantrypick, true); return; }
   if (t.closest('[data-pantrymore]')) { S.pantryAll = !S.pantryAll; keepScroll(renderStage); return; }

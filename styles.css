@@ -857,3 +857,9 @@ a.howto { text-decoration: none; color: var(--ink); }
 .timings th { font-weight: 600; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Inventering av skafferiet */
+.inv-sheet { max-height: 92dvh; }
+.inv-group { margin: 12px 0 4px; }
+.inv-group .pantry-g { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.inv-group .pantry-g h3 { margin: 0 0 6px; }

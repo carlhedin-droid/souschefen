@@ -155,6 +155,7 @@ window.Cloud = (() => {
     else if (['login', 'family'].includes(S.route.view)) go(startView());
     afterMerge(); renderStatus();
     queueWrite(0);
+    setTimeout(() => { if (window.absorbPantry) window.absorbPantry(); }, 1500);
     setTimeout(async () => { await flush(); try { localStorage.setItem('fk.cloudSynced', '1'); } catch { } }, 1200);
     if (typeof OLD_HOST !== 'undefined' && OLD_HOST) setTimeout(async () => { await flush(); try { localStorage.setItem('fk.cloudSynced', '1'); } catch { } toast(L('Allt är sparat – flyttar till nya adressen', 'Everything is saved – moving to the new address')); setTimeout(() => location.replace(NEW_HOME), 1500); }, 1500);
   }
