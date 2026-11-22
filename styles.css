@@ -959,3 +959,6 @@ a.howto { text-decoration: none; color: var(--ink); }
 .note-switch { margin-top: 8px; min-height: 34px; padding: 4px 14px; font-size: 14px; font-weight: 700; }
 .r-notes li { align-items: baseline; }
 .r-notes li strong { margin-left: 0; }
+
+.r-updating { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 6px 12px; border-radius: 999px; background: var(--pandan-soft); color: var(--ink); font-size: 14px; font-weight: 600; width: fit-content; }
+.r-updating .pot { width: 20px; height: 20px; }

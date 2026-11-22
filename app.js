@@ -1216,10 +1216,11 @@ function showProgress(acc, override) {
 async function send(text, image, opts = {}) {
   text = (text || '').trim();
   if ((!text && !image) || S.busy) return;
-  const flow = !!opts.flow;
+  const flow = !!opts.flow || !!opts.inPlace;  // inPlace: ändring direkt i receptet, utan att chatten öppnas
   S.readingHost = (() => { const l = (text.match(/https?:\/\/[^\s]+/) || [])[0]; try { return l ? new URL(l).hostname.replace(/^www\./, '') : ''; } catch { return ''; } })();
   const userMsg = { role: 'user', text: text || L('Vad kan jag laga av det här?', 'What can I cook with this?'), image, at: now(), hidden: flow, ...(opts.display ? { display: opts.display } : {}) };
   S.chat.push(userMsg);
+  if (opts.inPlace) { S.updating = opts.inPlace; if (S.route.view === 'recipe') keepScroll(renderStage); }
   S.busy = flow ? 'flow' : 'chat'; S.partialSugg = null; S.partialRecipe = null; saveChat(); renderChat(true);
   if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
   try {
@@ -1253,7 +1254,8 @@ async function send(text, image, opts = {}) {
       addHistory(recipe, keepId);
       if (!(S.portions && S.portions.title === recipe.title)) S.portions = null;
       msg.view = { recipe };
-      if (flow) msg.hidden = true; else { const d = recipeDiff(prevRecipe, recipe); msg.updated = prevRecipe ? (d.length ? d : opts.enrich === 'drinks' ? [L('dryckestips är tillagda', 'drink suggestions are added')] : opts.enrich ? [L('rubriker, översikt och tips är tillagda', 'headings, overview and tips are added')] : 'same') : [L('nytt recept', 'new recipe')]; }
+      if (opts.inPlace) { msg.hidden = true; const d = recipeDiff(prevRecipe, recipe); toast(d.length ? L('Uppdaterat: ', 'Updated: ') + d.slice(0, 3).join(', ') : L('Receptet är uppdaterat', 'The recipe is updated'), 3500); }
+      else if (flow) msg.hidden = true; else { const d = recipeDiff(prevRecipe, recipe); msg.updated = prevRecipe ? (d.length ? d : opts.enrich === 'drinks' ? [L('dryckestips är tillagda', 'drink suggestions are added')] : opts.enrich ? [L('rubriker, översikt och tips är tillagda', 'headings, overview and tips are added')] : 'same') : [L('nytt recept', 'new recipe')]; }
       S.extrasFor = recipe; S.extrasErr = null;
       if (S.route.view !== 'recipe') go('recipe', { keepChat: true }); else { const sc = $('#stage').scrollTop; renderStage(); $('#stage').scrollTop = sc; }
       saveSession();
@@ -1297,7 +1299,8 @@ async function send(text, image, opts = {}) {
     }
     S.busy = false; S.partialSugg = null; S.partialRecipe = null; saveChat(); renderChat(true);
     if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
-    if (!document.querySelector('.app[data-chat="open"]')) $('#chatDot').hidden = false;
+    if (S.updating) { S.updating = null; if (S.route.view === 'recipe') keepScroll(renderStage); }
+    if (!flow && !document.querySelector('.app[data-chat="open"]')) $('#chatDot').hidden = false;
   }
 }
 
@@ -1558,6 +1561,7 @@ function viewRecipe() {
       ${saved?.rating ? `<span class="r-stars" aria-label="${L(`${saved.rating} av 5`, `${saved.rating} of 5`)}">${'★'.repeat(saved.rating)}</span>` : ''}
       ${saved && !S.current.dirty ? `<span class="r-saved">${L('I kokboken', 'In cookbook')}</span>` : ''}
     </div>
+    ${S.updating ? `<div class="r-updating" aria-live="polite">${potSvg()}<span>${esc(S.updating)}</span></div>` : ''}
     ${S.healthOpen && r.health?.why ? `<p class="r-health-why">${esc(r.health.why)}</p>` : ''}
     ${saved && S.current.dirty ? `<p class="r-dirty">${L('Receptet är ändrat sedan du sparade.', 'The recipe has changed since you saved it.')} <button class="linkish" data-save>${L('Spara ändringarna', 'Save changes')}</button></p>` : ''}
     ${r.intro ? `<p class="r-intro">${esc(r.intro)}</p>` : ''}
@@ -2620,16 +2624,16 @@ $('#stage').addEventListener('click', async e => {
   const nr = t.closest('[data-noteref]');
   if (nr) { e.preventDefault(); e.stopPropagation(); const key = nr.dataset.noteref + '|' + nr.dataset.where; S.openNote = S.openNote === key ? null : key; keepScroll(renderStage); return; }
   const nsw = t.closest('[data-noteswitch]');
-  if (nsw) { const n = S.current.recipe?.notes?.[+nsw.dataset.noteswitch]; if (n) { S.openNote = null; openChat(true); send(L(`Ändra receptet enligt kockens not "${n.title}": byt till ${n.switchTo}. Justera mängder och steg efter det och skicka HELA receptet i "recipe".`, `Change the recipe according to the chef's note "${n.title}": switch to ${n.switchTo}. Adjust amounts and steps and send the WHOLE recipe in "recipe".`), null, { display: L(`Byt till ${n.switchTo}`, `Switch to ${n.switchTo}`) }); } return; }
+  if (nsw) { const n = S.current.recipe?.notes?.[+nsw.dataset.noteswitch]; if (n) { S.openNote = null; send(L(`Ändra receptet enligt kockens not "${n.title}": byt till ${n.switchTo}. Justera mängder och steg efter det och skicka HELA receptet i "recipe".`, `Change the recipe according to the chef's note "${n.title}": switch to ${n.switchTo}. Adjust amounts and steps and send the WHOLE recipe in "recipe".`), null, { display: L(`Byt till ${n.switchTo}`, `Switch to ${n.switchTo}`), inPlace: L(`Byter till ${n.switchTo}…`, `Switching to ${n.switchTo}…`) }); } return; }
   if (t.closest('.note-pop')) return;
   const so = t.closest('[data-swapopen]');
   if (so) { e.preventDefault(); S.openSwap = S.openSwap === so.dataset.swapopen ? null : so.dataset.swapopen; keepScroll(renderStage); return; }
   const sw = t.closest('[data-swap]');
   if (sw) {
     const r = S.current.recipe, ing = r.ingredients.find(x => x.id === sw.dataset.swap), w = ing?.swaps?.[+sw.dataset.k]; if (!w) return;
-    S.openSwap = null; keepScroll(renderStage); openChat(true);
+    S.openSwap = null;
     const to = `${w.amount ? w.amount + ' ' : ''}${w.name}`;
-    send(L(`Byt ${ing.name} mot ${to} i receptet. Justera stegen efter det och skicka HELA receptet i "recipe".`, `Swap ${ing.name} for ${to} in the recipe. Adjust the steps to match and send the WHOLE recipe in "recipe".`), null, { display: L(`Byt ${ing.name} mot ${w.name}`, `Swap ${ing.name} for ${w.name}`) });
+    send(L(`Byt ${ing.name} mot ${to} i receptet. Justera stegen efter det och skicka HELA receptet i "recipe".`, `Swap ${ing.name} for ${to} in the recipe. Adjust the steps to match and send the WHOLE recipe in "recipe".`), null, { display: L(`Byt ${ing.name} mot ${w.name}`, `Swap ${ing.name} for ${w.name}`), inPlace: L(`Byter ${ing.name} mot ${w.name}…`, `Swapping ${ing.name} for ${w.name}…`) });
     return;
   }
   if (t.closest('[data-hideopt]')) { S.hideOptional = !S.hideOptional; keepScroll(renderStage); return; }
