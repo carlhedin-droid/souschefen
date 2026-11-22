@@ -459,7 +459,7 @@ details.adv[open] summary { margin-bottom: 8px; }
 .stage.split .r-head { margin-bottom: 12px; }
 .stage.split .r-head h1 { font-size: clamp(22px, 2.6vw, 32px); }
 .stage.split .r-meta { margin-top: 6px; }
-.stage.split .r-intro, .stage.split .r-jump, .stage.split .start-cook, .stage.split .step-hint { display: none; }
+.stage.split .r-intro, .stage.split .start-cook, .stage.split .step-hint { display: none; }
 .stage.split .r-split { flex: 1; min-height: 0; display: grid; gap: 16px;
   grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); grid-template-areas: "steps ing"; }
 .stage.split .r-main { grid-area: steps; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 16px; }
@@ -903,3 +903,23 @@ a.howto { text-decoration: none; color: var(--ink); }
 
 .tag.pick { background: var(--pandan); color: var(--pandan-ink); font-size: 11px; vertical-align: middle; margin-left: 4px; }
 .dr-avoid strong { color: var(--chili, #b4442f); }
+
+/* Receptflikar: Laga / Dryck / Mer */
+.r-jump .only-split { display: none; }
+.stage.split .r-jump { display: flex; margin: 0 0 10px; position: static; padding: 0; background: none; box-shadow: none; }
+.stage.split .r-jump .only-split { display: inline-flex; }
+.stage.split .r-jump .no-split { display: none; }
+.r-pane .r-sec { max-width: 860px; }
+.stage.split .r-pane { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.tab-busy { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--kunyit, #e0a526); margin-left: 4px; vertical-align: middle; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.r-health { font-size: 13.5px; color: var(--muted); }
+
+/* Flikarna: kompakta */
+.r-jump button { white-space: nowrap; gap: 5px; padding: 0 10px; font-size: 15px; min-height: 42px; }
+.r-jump button[data-rtab="drink"], .r-jump button[data-rtab="more"] { flex: 0 1 auto; padding: 0 16px; }
+@media (max-width: 420px) { .r-jump button { font-size: 14px; padding: 0 8px; } .r-jump button span { font-size: 12px; } }
+.stage.split .r-jump { gap: 6px; }
+.stage.split .r-jump button { flex: 0 0 auto; min-height: 34px; padding: 0 18px; font-size: 14.5px; }
+.stage.split .r-pane .r-sec { padding-top: 18px; padding-bottom: 18px; }
+.r-pane .r-sec.more { background: var(--surface); }
