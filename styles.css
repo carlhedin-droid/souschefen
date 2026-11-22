@@ -933,3 +933,12 @@ a.howto { text-decoration: none; color: var(--ink); }
 .r-health-why { margin: 6px 0 0; font-size: 14px; color: var(--muted); max-width: 70ch; }
 .r-health-old { font-size: 13.5px; color: var(--muted); }
 .r-meta { flex-wrap: wrap; }
+
+/* Mobil/stående: Ingredienser och Gör så här som flikar */
+.stage:not(.split) .r-split.show-ing .r-main { display: none; }
+.stage:not(.split) .r-split.show-steps #r-ing { display: none; }
+@media (max-width: 420px) {
+  .r-jump { gap: 5px; }
+  .r-jump button { padding: 0 9px; font-size: 13.5px; }
+  .r-jump button[data-rtab="drink"], .r-jump button[data-rtab="more"] { padding: 0 11px; }
+}

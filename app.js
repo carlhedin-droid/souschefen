@@ -1139,7 +1139,33 @@ function partialArray(acc, key, ok) {
   return out;
 }
 function showProgress(acc, override) {
+  // Receptet är redan öppnat (ingredienserna klara): fyll på stegen allteftersom de skrivs
+  if (S.busy === 'flow' && S.provisional && !override && S.route.view === 'recipe' && S.current.recipe === S.provisional) {
+    const pr = partialRecipe(acc);
+    if (pr && pr.steps.length > S.provisional.steps.length) {
+      S.provisional.steps = pr.steps.map(x => ({ title: x.title || null, text: x.text || '', uses: Array.isArray(x.uses) ? x.uses.map(String) : [], minutes: Number(x.minutes) > 0 ? Number(x.minutes) : null, optional: x.optional === true }));
+      keepScroll(renderStage);
+    }
+    return;
+  }
   if (S.busy === 'flow' && !override && ['home', 'suggestions'].includes(S.route.view) && /"recipe"\s*:\s*\{/.test(acc)) {
+    // Ingredienslistan är klar när "steps" har börjat: öppna receptet på fliken Ingredienser direkt
+    const at = acc.search(/"recipe"\s*:\s*\{/);
+    if (/"steps"\s*:\s*\[/.test(acc.slice(at))) {
+      const pr = partialRecipe(acc), rest = acc.slice(at);
+      const num = k => { const m = new RegExp(`"${k}"\\s*:\\s*(\\d+)`).exec(rest); return m ? +m[1] : null; };
+      const tagM = /"tag"\s*:\s*"(VARDAG|HELG)"/.exec(rest);
+      const prov = normalizeRecipe({ title: pr.title || L('Receptet', 'The recipe'), origin: partialString(rest, 'origin'), countries: [], tag: tagM ? tagM[1] : null, time: pr.time, intro: pr.intro,
+        servings: num('servings') || 4, activeTime: partialString(rest, 'activeTime') || null, ahead: partialString(rest, 'ahead') || null, ingredients: pr.ingredients, steps: [] });
+      if (prov && prov.ingredients.length) {
+        S.provisional = prov; S.partialRecipe = null;
+        S.current.recipe = prov; S.current.recipeSavedId = null; S.current.dirty = false; S.openSwap = null;
+        S.checked = {}; S.doneSteps = {}; S.activeStep = null; S.cookStart = null; newSession();
+        S.rTab = 'ing'; S.rTabKey = prov.title;
+        go('recipe', { keepChat: true });
+        return;
+      }
+    }
     const pr = partialRecipe(acc), old = S.partialRecipe;
     if (pr && (pr.title || pr.ingredients.length) && (!old || old.title !== pr.title || old.ingredients.length !== pr.ingredients.length || old.steps.length !== pr.steps.length || (!old.intro && pr.intro))) {
       S.partialRecipe = pr;
@@ -1190,13 +1216,15 @@ async function send(text, image, opts = {}) {
     }
     if (recipe && linkInMsg && !recipe.source) recipe.source = linkInMsg;
     if (recipe) {
-      const keepId = S.route.view === 'recipe' && !opts.newDish ? S.current.recipeSavedId : null;
-      const sameDish = S.route.view === 'recipe' && !opts.newDish && S.current.recipe;
+      const wasProv = !!S.provisional && S.current.recipe === S.provisional;
+      const keepId = S.route.view === 'recipe' && !opts.newDish && !wasProv ? S.current.recipeSavedId : null;
+      const sameDish = S.route.view === 'recipe' && !opts.newDish && S.current.recipe && !wasProv;
       const prevRecipe = sameDish ? S.current.recipe : null;
       if (prevRecipe) carryExtras(prevRecipe, recipe);  // behåll tillbehör, dryck m.m. tills nya hämtats
       S.current.recipe = recipe; S.current.recipeSavedId = keepId; S.current.dirty = !!keepId;
       S.openSwap = null;
-      if (!sameDish) { S.checked = {}; S.doneSteps = {}; S.activeStep = null; S.cookStart = null; newSession(); }
+      if (wasProv) { S.provisional = null; S.rTabKey = recipe.title; }  // bockade ingredienser och vald flik behålls
+      else if (!sameDish) { S.checked = {}; S.doneSteps = {}; S.activeStep = null; S.cookStart = null; newSession(); }
       addHistory(recipe, keepId);
       if (!(S.portions && S.portions.title === recipe.title)) S.portions = null;
       msg.view = { recipe };
@@ -1238,6 +1266,10 @@ async function send(text, image, opts = {}) {
     S.chat.push({ role: 'error', text: nokey ? L('Souschefen behöver en gratis Gemini-nyckel. Lägg in den under Inställningar.', 'The sous-chef needs a free Gemini key. Add it under Settings.') : L(`Det gick inte att nå souschefen: ${e.message}`, `Could not reach the sous-chef: ${e.message}`), nokey, at: now() });
     openChat(true);
   } finally {
+    if (S.provisional) {  // strömmen dog innan receptet blev klart: gå tillbaka i stället för att visa ett halvt recept
+      if (S.current.recipe === S.provisional) { S.current.recipe = null; go(S.current.suggestions ? 'suggestions' : 'home', { keepChat: true }); }
+      S.provisional = null;
+    }
     S.busy = false; S.partialSugg = null; S.partialRecipe = null; saveChat(); renderChat(true);
     if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
     if (!document.querySelector('.app[data-chat="open"]')) $('#chatDot').hidden = false;
@@ -1469,8 +1501,10 @@ function viewRecipe() {
   if (!r) return `<div class="empty"><h2>${L('Inget recept öppet', 'No recipe open')}</h2><p>${L('Välj ett förslag eller öppna en rätt i kokboken.', 'Pick a suggestion or open a dish in the cookbook.')}</p><button class="btn" data-go="home">${L('Till start', 'To start')}</button></div>`;
   const saved = S.current.recipeSavedId ? S.data.recipes.find(x => x.id === S.current.recipeSavedId) : null;
   const n = portionsFor(r), f = n / (r.servings || 4);
-  if (S.rTabKey !== r.title) { S.rTab = 'cook'; S.rTabKey = r.title; }  // nytt recept: börja på Laga
-  const tab = S.rTab || 'cook';
+  if (S.rTabKey !== r.title) { S.rTab = 'ing'; S.rTabKey = r.title; }  // nytt recept: börja på Ingredienser
+  let tab = S.rTab || 'ing'; if (tab === 'cook') tab = 'ing';
+  const cook = tab === 'ing' || tab === 'steps';
+  const streamingSteps = S.provisional === r;
   const groups = [];
   r.ingredients.forEach(ing => {
     let g = groups.find(x => x.name === (ing.group || ''));
@@ -1485,7 +1519,7 @@ function viewRecipe() {
   return `<article class="recipe">
   <header class="r-head">
     <div class="r-corner">
-      <button class="icon-btn r-save${saved ? ' on' : ''}${S.current.dirty ? ' dirty' : ''}" ${!saved || S.current.dirty ? 'data-save' : 'data-rtab="more"'} aria-label="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken – visa anteckningar', 'Saved – show notes')}" title="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken', 'Saved in cookbook')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.2-6.5 4.2v-16a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+      ${S.provisional === r ? '' : `<button class="icon-btn r-save${saved ? ' on' : ''}${S.current.dirty ? ' dirty' : ''}" ${!saved || S.current.dirty ? 'data-save' : 'data-rtab="more"'} aria-label="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken – visa anteckningar', 'Saved – show notes')}" title="${!saved ? L('Spara i kokboken', 'Save to cookbook') : S.current.dirty ? L('Spara ändringarna', 'Save changes') : L('Sparad i kokboken', 'Saved in cookbook')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-4.2-6.5 4.2v-16a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>`}
       <button class="icon-btn r-close" data-go="${back}" aria-label="${L('Stäng receptet', 'Close the recipe')}" title="${L('Stäng', 'Close')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
     </div>
     <div class="r-origin origin">${r.origin || r.countries ? `${flags(r)}<span>${esc(r.origin || '')}</span>` : ''}</div>
@@ -1495,7 +1529,7 @@ function viewRecipe() {
       ${r.tag ? `<span class="tag ${isHelg ? 'helg' : 'vardag'}">${isHelg ? L('Helg', 'Weekend') : L('Vardag', 'Weekday')}</span>` : ''}
       ${r.time ? `<span>${esc(r.time)}</span>` : ''}
       ${healthChip(r)}
-      ${'speechSynthesis' in window || 'Audio' in window ? `<span class="listen${S.speech && S.speech.title ? ' active' : ''}" id="listenCard">${listenCardHtml()}</span>` : ''}
+      ${S.provisional !== r && ('speechSynthesis' in window || 'Audio' in window) ? `<span class="listen${S.speech && S.speech.title ? ' active' : ''}" id="listenCard">${listenCardHtml()}</span>` : ''}
       ${saved?.rating ? `<span class="r-stars" aria-label="${L(`${saved.rating} av 5`, `${saved.rating} of 5`)}">${'★'.repeat(saved.rating)}</span>` : ''}
       ${saved && !S.current.dirty ? `<span class="r-saved">${L('I kokboken', 'In cookbook')}</span>` : ''}
     </div>
@@ -1506,14 +1540,14 @@ function viewRecipe() {
   </header>
 
   <nav class="r-jump" aria-label="${L('Receptets delar', 'Recipe sections')}">
-    <button class="only-split${tab === 'cook' ? ' on' : ''}" data-rtab="cook">${L('Laga', 'Cook')}</button>
-    <button class="no-split${tab === 'cook' ? ' on' : ''}" data-rtab="cook" data-jump="r-ing">${L('Ingredienser', 'Ingredients')} <span>${checkedCount}/${r.ingredients.length}</span></button>
-    <button class="no-split" data-rtab="cook" data-jump="r-steps">${L('Steg', 'Steps')} <span>${doneCount}/${r.steps.length}</span></button>
+    <button class="only-split${cook ? ' on' : ''}" data-rtab="cook">${L('Laga', 'Cook')}</button>
+    <button class="no-split${tab === 'ing' ? ' on' : ''}" data-rtab="ing">${L('Ingredienser', 'Ingredients')} <span>${checkedCount}/${r.ingredients.length}</span></button>
+    <button class="no-split${tab === 'steps' ? ' on' : ''}" data-rtab="steps">${L('Gör så här', 'Method')} ${streamingSteps ? '<i class="tab-busy"></i>' : `<span>${doneCount}/${r.steps.length}</span>`}</button>
     <button class="${tab === 'drink' ? 'on' : ''}" data-rtab="drink">${L('Dryck', 'Drinks')}${S.extrasFor === r && !r.drinks ? ' <i class="tab-busy"></i>' : ''}</button>
     <button class="${tab === 'more' ? 'on' : ''}" data-rtab="more">${L('Mer', 'More')}${S.extrasFor === r ? ' <i class="tab-busy"></i>' : ''}</button>
   </nav>
   ${tab === 'drink' ? `<div class="r-pane" id="r-drink">${drinksPane(r)}</div>` : tab === 'more' ? `<div class="r-pane" id="r-more">${morePane(r, saved)}</div>` : `
-  <div class="r-split">
+  <div class="r-split show-${tab}">
   <section class="r-sec ingredients" id="r-ing" aria-label="${L('Ingredienser', 'Ingredients')}">
     <div class="sec-head"><h2>${L('Ingredienser', 'Ingredients')}</h2>${stepper}</div>
     ${groups.map(g => `<div class="ing-group">${g.name ? `<h3 class="group-label">${esc(g.name)}</h3>` : ''}
@@ -1532,6 +1566,7 @@ function viewRecipe() {
   <section class="r-sec steps" id="r-steps" aria-label="${L('Gör så här', 'Method')}">
     <div class="sec-head"><h2>${L('Gör så här', 'Method')}</h2><span class="muted step-hint">${L('Tryck på ett steg för att markera var du är', 'Tap a step to mark where you are')}</span>${stepper}</div>
     ${r.steps.some(s => s.optional) ? `<button type="button" class="chip opt opt-toggle" data-hideopt aria-pressed="${!!S.hideOptional}">${L('Dölj steg som kan hoppas över', 'Hide optional steps')}</button>` : ''}
+    ${streamingSteps && !r.steps.length ? `<div class="extras-loading">${potSvg()}<span>${L('Souschefen skriver stegen – kolla ingredienserna så länge…', 'The sous-chef is writing the steps – check the ingredients meanwhile…')}</span></div>` : ''}
     <ol>${r.steps.map((s, k) => `
       <li class="step ${S.activeStep === k ? 'active' : ''} ${S.doneSteps[k] ? 'done' : ''}" data-step="${k}" data-n="${k + 1}" ${s.optional && S.hideOptional ? 'hidden' : ''}>
         ${s.title ? `<h3 class="step-title">${esc(s.title)}${s.optional ? ` <span class="tag optional">${L('Kan hoppas över', 'Optional')}</span>` : ''}</h3>` : ''}
@@ -1543,6 +1578,7 @@ function viewRecipe() {
           <button class="ghost" data-done="${k}">${S.doneSteps[k] ? L('Ångra', 'Undo') : L('Klar', 'Done')}</button>
         </div>
       </li>`).join('')}</ol>
+    ${streamingSteps && r.steps.length ? `<div class="extras-loading">${potSvg()}<span>${L('Fler steg på väg…', 'More steps coming…')}</span></div>` : ''}
   </section>
 
   </div>
@@ -1551,10 +1587,12 @@ function viewRecipe() {
 }
 // Flikarna Dryck och Mer
 function drinksPane(r) {
+  if (S.provisional === r) return `<section class="r-sec"><div class="extras-loading">${potSvg()}<span>${L('Dryckestipsen kommer när receptet är klart…', 'Drink suggestions come when the recipe is done…')}</span></div></section>`;
   const busy = S.extrasFor === r;
   return `<section class="r-sec" aria-label="${L('Dryck', 'Drinks')}">${!r.drinks && busy ? `<div class="extras-loading">${potSvg()}<span>${L('Souschefen funderar på dryck…', 'The sous-chef is thinking about drinks…')}</span></div>` : drinksBlock(r)}</section>`;
 }
 function morePane(r, saved) {
+  if (S.provisional === r) return `<section class="r-sec"><div class="extras-loading">${potSvg()}<span>${L('Noter, tillbehör och förvaring kommer när receptet är klart…', 'Notes, sides and storage come when the recipe is done…')}</span></div></section>`;
   const legacy = [...(r.tips || []), ...(r.health?.tips || [])];
   return `<section class="r-sec more" aria-label="${L('Mer', 'More')}">
     ${r.health && (r.health.why || r.health.summary) ? `<div class="r-extra"><h3>${L('Hälsomålet', 'Health goal')}${r.health.rating ? ` – ${esc(healthText(r.health.rating))}` : ''}</h3><p>${esc(r.health.why || r.health.summary)}</p></div>` : ''}
@@ -2614,14 +2652,14 @@ $('#stage').addEventListener('click', async e => {
   if (t.closest('[data-healthwhy]')) { S.healthOpen = !S.healthOpen; keepScroll(renderStage); return; }
   const rt = t.closest('[data-rtab]');
   if (rt) {
-    const was = S.rTab || 'cook'; S.rTab = rt.dataset.rtab;
+    const was = S.rTab || 'ing'; S.rTab = rt.dataset.rtab === 'cook' ? 'ing' : rt.dataset.rtab;
     if (was !== S.rTab) { renderStage(); $('#stage').scrollTop = 0; }
     if (rt.dataset.jump) requestAnimationFrame(() => scrollToSec(rt.dataset.jump));
     return;
   }
   const jump = t.closest('[data-jump]');
   if (jump) { scrollToSec(jump.dataset.jump); return; }
-  if (t.closest('[data-startcook]')) { if (S.activeStep == null) S.activeStep = 0; if (!S.cookStart) S.cookStart = Date.now(); refreshSteps(); scrollToSec('r-steps'); saveSession(); return; }
+  if (t.closest('[data-startcook]')) { if (S.activeStep == null) S.activeStep = 0; if (!S.cookStart) S.cookStart = Date.now(); if (!$('#stage').classList.contains('split')) { S.rTab = 'steps'; renderStage(); $('#stage').scrollTop = 0; } else refreshSteps(); requestAnimationFrame(() => scrollToSec('r-steps')); saveSession(); return; }
   const tm = t.closest('[data-timer]');
   if (tm) { const s = S.current.recipe.steps[+tm.dataset.timer]; startTimer(s.title || L(`Steg ${+tm.dataset.timer + 1}`, `Step ${+tm.dataset.timer + 1}`), s.minutes); return; }
   const dn = t.closest('[data-done]');
@@ -2720,7 +2758,7 @@ $('#stage').addEventListener('scroll', () => {
   const top0 = $('#stage').getBoundingClientRect().top + nav.offsetHeight + 80;
   let cur = 'r-ing';
   ['r-steps'].forEach(id => { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top < top0) cur = id; });
-  if ((S.rTab || 'cook') !== 'cook') return;
+  return;  // ingredienser och steg är flikar nu
   nav.querySelectorAll('[data-jump]').forEach(b => b.classList.toggle('on', b.dataset.jump === cur));
 }, { passive: true });
 function refreshSteps() {
