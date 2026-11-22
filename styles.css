@@ -923,3 +923,13 @@ a.howto { text-decoration: none; color: var(--ink); }
 .stage.split .r-jump button { flex: 0 0 auto; min-height: 34px; padding: 0 18px; font-size: 14.5px; }
 .stage.split .r-pane .r-sec { padding-top: 18px; padding-bottom: 18px; }
 .r-pane .r-sec.more { background: var(--surface); }
+
+/* Hälsogradering */
+.r-health { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.r-health i { width: 9px; height: 9px; border-radius: 50%; background: #9aa59d; }
+.r-health.h-bra i { background: #2f9e5b; }
+.r-health.h-neutral i { background: #d9a520; }
+.r-health.h-mindre-bra i { background: #c9553b; }
+.r-health-why { margin: 6px 0 0; font-size: 14px; color: var(--muted); max-width: 70ch; }
+.r-health-old { font-size: 13.5px; color: var(--muted); }
+.r-meta { flex-wrap: wrap; }

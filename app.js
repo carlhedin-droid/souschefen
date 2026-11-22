@@ -171,7 +171,7 @@ LÄGE 2 – RECEPT (vald rätt, länk eller inklistrat recept, eller ändring)
 - Första steget är förberedelser (mise en place, sätt på ugn eller grill) när det behövs. Sedan korta, numrerade, imperativa steg med parallella moment ("Medan riset kokar: …").
 - Varje steg: mängder utskrivna, värme (svag/medel/hög eller °C), tid och klar-tecken (färg, konsistens, innertemperatur för kött, fågel och fisk).
 - Flavor ROI: fett och kalorier som ger stor smakutdelning är ok. Smak går före asketism – maten får aldrig bli tråkig.
-- Hälsa: följ hälsomålet. Uppskatta protein (g) och energi (kcal) per portion i "health.summary" – en kort rad. Lättare byten och tips skrivs som kockens noter vid rätt ingrediens eller steg (de fylls i separat).
+- Hälsa: följ hälsomålet. Bedöm rätten mot HÄLSOMÅLET i INSTÄLLNINGAR i "health": "rating" är "bra", "neutral" eller "mindre bra", och "why" är en kort mening om varför (t.ex. "Mycket protein och grönt, måttligt med fett"). Inga siffror. Finns inget hälsomål: health = null. Lättare byten och tips skrivs som kockens noter vid rätt ingrediens eller steg (de fylls i separat).
 - RENSKRIVNING (länk eller inklistrat recept): återge originalet troget – samma råvaror, mängder, tekniker och ordning. Ändra bara det som gör receptet lättare att följa: metriska mått, skalning till våra portioner, mängder utskrivna i stegen, tydligare och kortare steg, värme och klar-tecken där originalet är otydligt. Egna förbättringar och anpassningar efter våra inställningar läggs i kockens noter och de extra delarna (byten, om det går fel, servera med, förvaring), som fylls i separat – inte i själva receptet. Undantag: krockar något med ALLERGIER OCH ÄTER INTE, byt ut det och säg det i reply. Sätt "source" till länken. Säg i reply kort varifrån receptet kommer och vad du justerat.
 - Kunde du inte läsa länken (sidan saknas, kräver inloggning eller innehåller inget recept): hitta INTE på ett recept. Säg det i reply, sätt recipe till null och be oss klistra in receptets text.
 - Ändring: skicka hela receptet, behåll ingrediens-id och portioner om inget annat sägs.
@@ -179,7 +179,7 @@ LÄGE 2 – RECEPT (vald rätt, länk eller inklistrat recept, eller ändring)
 LÄGE 3 – INSPIRATION (råvaror, foto eller önskemål)
 - 5–8 förslag, vart och ett med kort "varför den passar oss" – koppla gärna till kokboken, betygen och smakminnet.
 - Vardag: flest snabba. Helg: fler ambitiösa. Alla ryms i dagens tidsram om inget annat sägs.
-- Sprid över favoritländerna; minst ett vegetariskt och minst ett tydligt nyttigare förslag.
+- Sprid över favoritländerna; minst ett vegetariskt och minst ett förslag som är "bra" för hälsomålet.
 - Undvik rätter vi lagat den senaste veckan om vi inte ber om dem; variationer på högt betygsatta rätter är välkomna.
 - Foto: utgå från det du ser, nämn kort vad du identifierat och fråga om något är osäkert.
 
@@ -301,7 +301,7 @@ const RECIPE_CORE_PROPS = {
   overview: S_ARR, activeTime: S_STRN, ahead: S_STRN,
   ingredients: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, amount: S_STR, name: S_STR, note: S_STRN, group: S_STRN, pantry: { type: 'BOOLEAN' }, staple: { type: 'BOOLEAN' } }, required: ['id', 'amount', 'name'], propertyOrdering: ['id', 'amount', 'name', 'note', 'group', 'pantry', 'staple'] } },
   steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' }, howTo: S_STRN }, required: ['title', 'text'], propertyOrdering: ['title', 'text', 'uses', 'minutes', 'optional', 'howTo'] } },
-  health: { type: 'OBJECT', nullable: true, properties: { summary: S_STR } },
+  health: { type: 'OBJECT', nullable: true, properties: { rating: { type: 'STRING', enum: ['bra', 'neutral', 'mindre bra'] }, why: S_STR }, required: ['rating'] },
 };
 // Huvudsvaret: chatt, förslag eller kärnreceptet (ingredienser och steg). Extradelarna hämtas efteråt (EXTRAS_SCHEMA).
 const RESPONSE_SCHEMA = {
@@ -310,7 +310,7 @@ const RESPONSE_SCHEMA = {
     reply: S_STR,
     suggestions: { type: 'ARRAY', nullable: true, items: { type: 'OBJECT', properties: {
       name: S_STR, origin: S_STR, countries: S_ARR, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, difficulty: S_STR,
-      why: S_STR, keyIngredients: S_ARR, equipment: S_STRN, healthier: { type: 'BOOLEAN' }, vegetarian: { type: 'BOOLEAN' } },
+      why: S_STR, keyIngredients: S_ARR, equipment: S_STRN, health: { type: 'STRING', enum: ['bra', 'neutral', 'mindre bra'] }, vegetarian: { type: 'BOOLEAN' } },
       required: ['name', 'origin', 'tag', 'time', 'why'] } },
     recipe: { type: 'OBJECT', nullable: true, properties: RECIPE_CORE_PROPS, required: ['title', 'ingredients', 'steps'], propertyOrdering: Object.keys(RECIPE_CORE_PROPS) },
     learn: S_ARR,
@@ -345,14 +345,14 @@ const FORMAT_RULES = `## APPENS SVARSFORMAT (måste följas)
 Du svarar inuti en app. Svara ALLTID med exakt ett JSON-objekt – ingen text före eller efter, inga kodstaket.
 {
   "reply": "Text som visas i chatten. LÄGE 1: hela svaret. Nytt recept eller förslag: högst 1–2 meningar, upprepa INTE innehållet. Ändrat recept: en mening om vad som ändrats. Enkel markdown (**fet**, punktlistor med '- ') är ok.",
-  "suggestions": null | [ { "name": "", "origin": "kök/land", "countries": ["MY"], "tag": "VARDAG" | "HELG", "time": "t.ex. 35 min", "difficulty": "Lätt" | "Medel" | "Avancerad", "why": "1–2 meningar om varför den passar oss", "keyIngredients": [""], "equipment": "" | null, "healthier": true|false, "vegetarian": true|false } ],
+  "suggestions": null | [ { "name": "", "origin": "kök/land", "countries": ["MY"], "tag": "VARDAG" | "HELG", "time": "t.ex. 35 min", "difficulty": "Lätt" | "Medel" | "Avancerad", "why": "1–2 meningar om varför den passar oss", "keyIngredients": [""], "equipment": "" | null, "health": "bra" | "neutral" | "mindre bra" (mot hälsomålet), "vegetarian": true|false } ],
   "recipe": null | {
     "title": "", "origin": "", "countries": ["MY"], "source": "länk till originalet" | null, "tag": "VARDAG" | "HELG", "time": "", "servings": 4, "intro": "1–2 meningar",
     "overview": ["Marinera kycklingen", "Stek den i samma panna", "Koka ihop såsen"],
     "activeTime": "40 min" | null, "ahead": "Marinera minst 3 h, gärna över natten" | null,
     "ingredients": [ { "id": "i1", "amount": "300 g", "name": "kycklinglårfilé", "note": "i bitar" | null, "group": "Marinad" | null, "pantry": false, "staple": false } ],
     "steps": [ { "title": "Bryn kycklingen", "text": "Bryn 300 g kycklinglårfilé ...", "uses": ["i1"], "minutes": 8 | null, "optional": false, "howTo": "how to sear chicken thighs" | null } ],
-    "health": { "summary": "≈45 g protein, 650 kcal per portion" }
+    "health": { "rating": "bra" | "neutral" | "mindre bra", "why": "Mycket protein och grönt, måttligt med fett" } | null
   },
   "learn": [ "kort ny lärdom om familjens smak/vanor" ],
   "offerUpdate": false
@@ -1101,7 +1101,8 @@ function normalizeRecipe(r) {
   else r.drinks = null;
   r.servings = r.servings || 4;
   if (r.source && !/^https?:\/\//.test(r.source)) r.source = null;
-  r.health = r.health || null; r.tips = Array.isArray(r.tips) ? r.tips : [];
+  r.health = r.health && typeof r.health === 'object' ? r.health : null;
+  if (r.health && !['bra', 'neutral', 'mindre bra'].includes(r.health.rating)) delete r.health.rating; r.tips = Array.isArray(r.tips) ? r.tips : [];
   return r;
 }
 
@@ -1442,10 +1443,10 @@ function viewSuggestions() {
     <div class="sugg-head"><h1>${streaming ? L(`Förslag till ${dayInfo().name}`, `Suggestions for ${dayName()}`) : L(`${list.length} förslag till ${dayInfo().name}`, `${list.length} suggestions for ${dayName()}`)}</h1></div>
     ${intro ? `<div class="sugg-intro">${md(intro)}</div>` : ''}
     <div class="sugg-grid">${list.map((s, i) => `
-      <article class="sugg ${s.healthier ? 'healthier' : ''}">
+      <article class="sugg">
         <div class="tags">
           <span class="tag ${String(s.tag).toLowerCase() === 'helg' ? 'helg' : 'vardag'}">${String(s.tag).toLowerCase() === 'helg' ? L('Helg', 'Weekend') : L('Vardag', 'Weekday')}</span>
-          ${s.healthier ? `<span class="tag healthy">${esc(healthLabel())}</span>` : ''}
+          ${s.health && HEALTH_TXT[s.health] ? `<span class="r-health h-${s.health.replace(' ', '-')}" title="${esc(healthText(s.health))}"><i></i>${esc({ bra: L('Bra', 'Good'), neutral: L('Neutral', 'Neutral'), 'mindre bra': L('Mindre bra', 'Less good') }[s.health])}</span>` : s.healthier ? `<span class="tag healthy">${esc(healthLabel())}</span>` : ''}
           ${s.vegetarian ? `<span class="tag veg">${L('Vegetarisk', 'Vegetarian')}</span>` : ''}
         </div>
         <h3>${esc(s.name)}</h3>
@@ -1494,11 +1495,12 @@ function viewRecipe() {
       ${r.source ? `<a class="r-source" href="${esc(r.source)}" target="_blank" rel="noopener">${L('Källa', 'Source')}: ${esc((() => { try { return new URL(r.source).hostname.replace(/^www\./, ''); } catch { return L('länk', 'link'); } })())}</a>` : ''}
       ${r.tag ? `<span class="tag ${isHelg ? 'helg' : 'vardag'}">${isHelg ? L('Helg', 'Weekend') : L('Vardag', 'Weekday')}</span>` : ''}
       ${r.time ? `<span>${esc(r.time)}</span>` : ''}
-      ${r.health?.summary && r.health.summary.length <= 90 ? `<span class="r-health" title="${esc(healthLabel())}">${esc(r.health.summary)}</span>` : ''}
+      ${healthChip(r)}
       ${'speechSynthesis' in window || 'Audio' in window ? `<span class="listen${S.speech && S.speech.title ? ' active' : ''}" id="listenCard">${listenCardHtml()}</span>` : ''}
       ${saved?.rating ? `<span class="r-stars" aria-label="${L(`${saved.rating} av 5`, `${saved.rating} of 5`)}">${'★'.repeat(saved.rating)}</span>` : ''}
       ${saved && !S.current.dirty ? `<span class="r-saved">${L('I kokboken', 'In cookbook')}</span>` : ''}
     </div>
+    ${S.healthOpen && r.health?.why ? `<p class="r-health-why">${esc(r.health.why)}</p>` : ''}
     ${saved && S.current.dirty ? `<p class="r-dirty">${L('Receptet är ändrat sedan du sparade.', 'The recipe has changed since you saved it.')} <button class="linkish" data-save>${L('Spara ändringarna', 'Save changes')}</button></p>` : ''}
     ${r.intro ? `<p class="r-intro">${esc(r.intro)}</p>` : ''}
     ${recipeTop(r)}
@@ -1557,7 +1559,7 @@ function drinksPane(r) {
 function morePane(r, saved) {
   const legacy = [...(r.tips || []), ...(r.health?.tips || [])];
   return `<section class="r-sec more" aria-label="${L('Mer', 'More')}">
-    ${r.health?.summary && r.health.summary.length > 90 ? `<div class="health"><h3>${esc(healthLabel())}</h3><div>${md(r.health.summary)}</div></div>` : ''}
+    ${r.health && (r.health.why || r.health.summary) ? `<div class="r-extra"><h3>${L('Hälsomålet', 'Health goal')}${r.health.rating ? ` – ${esc(healthText(r.health.rating))}` : ''}</h3><p>${esc(r.health.why || r.health.summary)}</p></div>` : ''}
     ${recipeAfter(r)}
     ${notesSection(r)}
     ${legacy.length ? `<div class="r-extra"><h3>${L('Fler tips', 'More tips')}</h3><ul>${legacy.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
@@ -2176,6 +2178,14 @@ function flags(x) {
   // Bilder i stället för emoji – Windows visar inte flagg-emoji
   return countryCodes(x).map(cc => `<img class="flag" src="https://flagcdn.com/w40/${cc.toLowerCase()}.png" alt="${cc}" title="${cc}" width="22" height="16" loading="lazy">`).join('');
 }
+// Hälsogradering mot familjens hälsomål: bra / neutral / mindre bra (äldre recept: kort sammanfattning)
+const HEALTH_TXT = { bra: ['Bra för hälsomålet', 'Good for the health goal'], neutral: ['Neutral för hälsomålet', 'Neutral for the health goal'], 'mindre bra': ['Mindre bra för hälsomålet', 'Less good for the health goal'] };
+const healthText = k => L(...(HEALTH_TXT[k] || HEALTH_TXT.neutral));
+function healthChip(r) {
+  const h = r.health; if (!h) return '';
+  if (h.rating) return `<button type="button" class="r-health h-${h.rating.replace(' ', '-')}" data-healthwhy aria-expanded="${!!S.healthOpen}" title="${esc(h.why || '')}"><i></i>${esc(healthText(h.rating))}</button>`;
+  return h.summary && h.summary.length <= 90 ? `<span class="r-health-old">${esc(h.summary)}</span>` : '';
+}
 function healthLabel() {
   const who = (S.data.prefs.healthWho || '').trim();
   return who ? L(`${who}s val`, `${who}'s choice`) : L('Nyttigare', 'Healthier');
@@ -2603,6 +2613,7 @@ $('#stage').addEventListener('click', async e => {
   if (t.closest('[data-endsession]')) { if (S.data.session) { S.data.session.ended = true; S.data.session.updatedAt = now(); saveData(); } renderStage(); return; }
   const oh = t.closest('[data-hist]');
   if (oh) { const h = (S.data.history || []).find(x => x.id === oh.dataset.hist); if (h) { const saved = h.savedId && S.data.recipes.find(x => x.id === h.savedId); S.current.recipe = JSON.parse(JSON.stringify(saved || h.recipe)); S.current.recipeSavedId = saved ? saved.id : null; S.current.dirty = false; S.checked = {}; S.doneSteps = {}; S.activeStep = null; S.portions = null; if (joinIfActive(S.current.recipe)) { go('recipe'); renderChat(true); return; } newSession(); S.chat = []; saveChat(); saveCurrent(); go('recipe'); addHistory(S.current.recipe, S.current.recipeSavedId); saveSession(); } return; }
+  if (t.closest('[data-healthwhy]')) { S.healthOpen = !S.healthOpen; keepScroll(renderStage); return; }
   const rt = t.closest('[data-rtab]');
   if (rt) {
     const was = S.rTab || 'cook'; S.rTab = rt.dataset.rtab;
