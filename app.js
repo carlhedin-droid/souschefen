@@ -261,8 +261,11 @@ const PANTRY_DEFAULTS = { pantry: [] };
 // Förebilder: receptsajter vi litar på, separat för vardag (snabbt och smart) och helg (ambitiöst)
 const REF_SITES = [['RecipeTin Eats', 'recipetineats.com'], ['Serious Eats', 'seriouseats.com'], ["Marion's Kitchen", 'marionskitchen.com'], ['Köket.se', 'koket.se'],
   ['ICA Recept', 'ica.se/recept'], ['Ottolenghi', 'ottolenghi.co.uk'], ['The Woks of Life', 'thewoksoflife.com'], ['Rasa Malaysia', 'rasamalaysia.com'], ['Just One Cookbook', 'justonecookbook.com'],
-  ['Bon Appétit', 'bonappetit.com'], ['NYT Cooking', 'cooking.nytimes.com'], ['Jamie Oliver', 'jamieoliver.com'], ['BBC Good Food', 'bbcgoodfood.com']];
-const REF_DEFAULTS = { refWeekday: ['RecipeTin Eats', "Marion's Kitchen", 'Köket.se', 'Just One Cookbook'], refWeekend: ['Serious Eats', 'Ottolenghi', 'The Woks of Life', 'Rasa Malaysia'] };
+  ['Bon Appétit', 'bonappetit.com'], ['NYT Cooking', 'cooking.nytimes.com'], ['Jamie Oliver', 'jamieoliver.com'], ['BBC Good Food', 'bbcgoodfood.com'],
+  ['Hot Thai Kitchen', 'hot-thai-kitchen.com'], ['Nyonya Cooking', 'nyonyacooking.com'], ['Pati Jinich', 'patijinich.com'], ['GialloZafferano', 'giallozafferano.com'],
+  ['The Mediterranean Dish', 'themediterraneandish.com'], ['Smitten Kitchen', 'smittenkitchen.com']];
+const REF_DEFAULTS = { refWeekday: ['RecipeTin Eats', "Marion's Kitchen", 'Hot Thai Kitchen', 'Just One Cookbook', 'Pati Jinich', 'GialloZafferano', 'The Mediterranean Dish'],
+  refWeekend: ['Serious Eats', 'Ottolenghi', 'The Woks of Life', 'Rasa Malaysia', 'Nyonya Cooking'] };
 // Saknas listan (t.ex. äldre synkad data) gäller förvalen
 const refList = (P, k) => Array.isArray(P[k]) ? P[k] : [...REF_DEFAULTS[k]];
 const refDomain = name => (REF_SITES.find(x => x[0] === name) || [])[1] || (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(name.trim()) ? name.trim() : '');
@@ -510,6 +513,7 @@ function migrateData() {
   else if (S.data.profile && !/Malaysia|foodie/i.test(S.data.profile) && !S.data.prefs.foodieAdded) { S.data.profile = S.data.profile.trim() + '\n' + FOODIE_LINE; }
   S.data.prefs.foodieAdded = true;
   pantryV2(S.data.prefs);
+  if (!S.data.prefs.refV2) { Object.assign(S.data.prefs, JSON.parse(JSON.stringify(REF_DEFAULTS)), { refV2: true }); }
   if (S.data.profile === LEGACY_PROFILE) S.data.profile = CARL_PROFILE;
 }
 // Skafferi v2: basvaror (lök, vitlök m.m.) hör till skafferiet. Befintliga familjer får lök och vitlök inlagda en gång.
