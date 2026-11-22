@@ -332,13 +332,8 @@ const EXTRAS_SCHEMA = {
     troubleshoot: { type: 'ARRAY', items: { type: 'OBJECT', properties: { problem: S_STR, fix: S_STR }, required: ['problem', 'fix'] } },
     serveWith: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, why: S_STRN }, required: ['name'] } },
     storage: { type: 'OBJECT', nullable: true, properties: { fridge: S_STRN, freezer: S_STRN, leftovers: S_STRN } },
-    drinks: { type: 'OBJECT', nullable: true, properties: { why: S_STR, approach: S_STRN, avoid: S_STRN, priceTip: S_STRN,
-      food: S_STRN,
-      options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: S_STR, taste: S_STRN, grape: S_STRN, country: S_STRN, region: S_STRN, lookFor: S_STRN, why: S_STRN, serve: S_STRN, pick: { type: 'BOOLEAN' } }, required: ['title', 'kind'] } },
-      nonAlcoholic: { type: 'OBJECT', nullable: true, properties: { title: S_STR, kind: S_STRN, why: S_STRN }, required: ['title'] } }, required: ['why'] },
-    spoken: S_STRN,
   },
-  propertyOrdering: ['notes', 'swaps', 'troubleshoot', 'serveWith', 'storage', 'drinks', 'spoken'],
+  propertyOrdering: ['notes', 'swaps', 'troubleshoot', 'serveWith', 'storage'],
 };
 
 const FORMAT_RULES = `## APPENS SVARSFORMAT (måste följas)
@@ -380,9 +375,7 @@ Receptet nedan visas redan i appen. Fyll i receptets extradelar. Ändra INTE rec
   "swaps": [ { "id": "i1", "options": [ { "name": "kycklingbröst", "amount": "300 g" | null, "why": "magrare, kortare stektid" } ] } ],
   "troubleshoot": [ { "problem": "Såsen är för tunn", "fix": "Sjud utan lock 5–10 min." } ],
   "serveWith": [ { "name": "Gurkraita", "why": "svalkar hettan" } ],
-  "storage": { "fridge": "3 dagar", "freezer": "3 månader, utan grädden" | null, "leftovers": "Fyll wraps med resterna" | null } | null,
-  "drinks": { "why": "…", "food": "pasta" | null, "options": [ { "title": "Syrligt, bärigt rött", "kind": "rott", "taste": "mjukt-barigt", "grape": "Barbera" | null, "country": "Italien" | null, "region": "Piemonte" | null, "lookFor": "Fruktsyra 8–10, strävhet under 6", "why": "Syran möter tomaten" } ], "priceTip": "…" | null, "nonAlcoholic": { "title": "Alkoholfritt mousserande", "kind": "alkoholfritt-mousserande", "why": "Friskt mot det feta" } | null } | null,
-  "spoken": "…" }
+  "storage": { "fridge": "3 dagar", "freezer": "3 månader, utan grädden" | null, "leftovers": "Fyll wraps med resterna" | null } | null }
 Regler (kort, konkret, inget fyllnadsprat):
   - "notes": 3–7 KOCKENS NOTER, i stil med en erfaren receptskribent som har gjort researchen åt oss så att vi slipper leta på nätet. Varje not hör till ett moment där man gör ett val eller där tekniken avgör resultatet – inte allmänt prat.
     - "kind": "val" (2–3 sätt att göra; vad som skiljer i smak, tid och disk; säg vilket du rekommenderar för oss och varför), "teknik" (varför steget görs så, vad som händer om man hoppar över det, klartecken), "byte" (vad ingrediensen gör i rätten, bästa ersättning och vad man förlorar), "inkop" (var den finns i Sverige – vilken hylla på ICA/Coop eller asiatisk butik, vad den heter på förpackningen, vad man ska titta efter), "forvag" (vad som kan göras i förväg och hur länge det håller), "lattare" (lättare variant och vad det kostar i smak), "genvag" (färdigköpt eller snabbare väg och vad det kostar i smak).
@@ -391,24 +384,35 @@ Regler (kort, konkret, inget fyllnadsprat):
   - "swaps": lista med {"id": ingrediensens id, "options": [...]}, bara för 2–5 ingredienser där ett byte är vanligt (svår att hitta, dyr, allergi, smak). 1–3 alternativ var med mängd och varför. Krockar aldrig med ALLERGIER OCH ÄTER INTE. Övriga ingredienser utelämnas.
   - "troubleshoot": 2–3 vanliga problem för just den här rätten med konkret åtgärd.
   - "serveWith": 2–3 tillbehör som passar, med kort varför.
-  - "drinks": se Dryckestips i INSTÄLLNINGAR. Inga specifika flaskor eller producenter – bara typ och stil, så att vi väljer själva på hyllan.
-    - Resonera som en erfaren sommelier som förklarar sitt val för oss – konkret och utan floskler.
-    - "why": 2–4 meningar om vad i rätten som styr valet: fett, syra, hetta, sötma, umami, sälta, textur och tillagning (grillat, bräserat, krämigt). Nämn den dominerande smaken – ofta såsen eller kryddningen, inte proteinet.
-    - "approach": 1–2 meningar om strategin: matcha (liknande tyngd och smak) eller kontrastera (t.ex. syra mot fett, sötma mot hetta) – och varför just det fungerar här.
-    - "avoid": 1–2 meningar om vad som INTE passar och varför (t.ex. "Strävt, ekat rött mot chili blir bittert och hettan förstärks").
-    - "options": 2–3 alternativ, gärna i olika riktningar (t.ex. ett rött, ett vitt och en öl). Per alternativ: "why" 2–3 meningar om vad i drycken som möter vad i rätten och vad man vinner eller förlorar jämfört med de andra alternativen; "serve": serveringstemperatur i °C och om det ska luftas eller karafferas (t.ex. "16 °C, gärna 30 min i karaff"); "pick": true på det alternativ du själv skulle välja (exakt ett). Fält som styr länken till Systembolaget:
-      - "kind": rott, vitt, rose, mousserande, ol eller cider.
-      - "taste": Systembolagets smakstil. Rött: mjukt-barigt, fruktigt-smakrikt, kryddigt-mustigt, stramt-nyanserat. Vitt: friskt-fruktigt, fylligt-smakrikt. Rosé: fruktigt-smakrikt. Mousserande: torrt-vitt. Annars null.
-      - "grape": EN druva som den heter på Systembolaget (t.ex. "Riesling", "Pinot noir", "Sangiovese"), eller null om flera passar lika bra.
-      - "country": ett land på svenska (t.ex. "Italien"), eller null.
-      - "region": ett område inom landet om det tydligt passar bäst (t.ex. "Piemonte", "Bourgogne", "Rioja", "Mosel"), annars null.
-    - "food": Systembolagets matsymbol som bäst beskriver rätten: aperitif, asiatiskt, buffemat, fisk, flask, fagel, gronsaker, kryddstarkt, lamm, not, ost, pasta, pizza, grillat, skaldjur eller vilt. Annars null.
-      - "lookFor": druvor eller områden och smakklockor (fyllighet, strävhet, fruktsyra, sötma, skala 1–12).
-    - "priceTip": var det finns mest för pengarna i vår prisklass.
-    - "nonAlcoholic": om inställningen säger det; "kind" är alkoholfritt-rott, alkoholfritt-vitt, alkoholfritt-mousserande, alkoholfri-ol eller annat (hemgjort).
-  - "spoken": en talad genomgång för uppläsning, 90–150 ord. Gå rakt på sak: nämn INTE rättens namn och beskriv eller sälj inte rätten (inga omdömen som "krämig", "god", "klassiker", ingen hälsning eller avrundning) – lyssnaren vet redan vad den lagar. Börja direkt med upplägget: total tid och det som måste göras i förväg. Sedan huvudmomenten i ordning med det som avgör resultatet (värme, tider, klartecken), och vad som kan göras parallellt. Avsluta med 1–2 tips som påverkar resultatet. Skriv som en vänlig kock pratar: korta meningar, inga listor, parenteser eller förkortningar ("matskedar", "grader", "minuter"). Skriv en ny när receptet ändras.
   - "storage": hållbarhet i kyl, om den går att frysa (och hur), och en idé för resterna. null om det inte är relevant (t.ex. en dryck).
 - ALLERGIER OCH ÄTER INTE gäller även här.`;
+// Dryckestips hämtas bara när man trycker på knappen i fliken Dryck
+const DRINKS_RULES = `## UPPGIFT
+Receptet nedan visas redan i appen. Föreslå dryck till maten som en erfaren sommelier. Inga specifika flaskor eller producenter – bara typ och stil, så att vi väljer själva på hyllan. Svara ENDAST med JSON:
+{ "drinks": { "why": "…", "food": "pasta" | null, "options": [ { "title": "Syrligt, bärigt rött", "kind": "rott", "taste": "mjukt-barigt", "grape": "Barbera" | null, "country": "Italien" | null, "region": "Piemonte" | null, "lookFor": "Fruktsyra 8–10, strävhet under 6", "why": "Syran möter tomaten" } ], "priceTip": "…" | null, "nonAlcoholic": { "title": "Alkoholfritt mousserande", "kind": "alkoholfritt-mousserande", "why": "Friskt mot det feta" } | null } | null }
+Regler:
+- Följ Dryckestips i INSTÄLLNINGAR (pris, alkoholfritt, det vi gillar och undviker). Inga specifika flaskor eller producenter – bara typ och stil, så att vi väljer själva på hyllan.
+- Resonera som en erfaren sommelier som förklarar sitt val för oss – konkret och utan floskler.
+- "why": 2–4 meningar om vad i rätten som styr valet: fett, syra, hetta, sötma, umami, sälta, textur och tillagning (grillat, bräserat, krämigt). Nämn den dominerande smaken – ofta såsen eller kryddningen, inte proteinet.
+- "approach": 1–2 meningar om strategin: matcha (liknande tyngd och smak) eller kontrastera (t.ex. syra mot fett, sötma mot hetta) – och varför just det fungerar här.
+- "avoid": 1–2 meningar om vad som INTE passar och varför (t.ex. "Strävt, ekat rött mot chili blir bittert och hettan förstärks").
+- "options": 2–3 alternativ, gärna i olika riktningar (t.ex. ett rött, ett vitt och en öl). Per alternativ: "why" 2–3 meningar om vad i drycken som möter vad i rätten och vad man vinner eller förlorar jämfört med de andra alternativen; "serve": serveringstemperatur i °C och om det ska luftas eller karafferas (t.ex. "16 °C, gärna 30 min i karaff"); "pick": true på det alternativ du själv skulle välja (exakt ett). Fält som styr länken till Systembolaget:
+  - "kind": rott, vitt, rose, mousserande, ol eller cider.
+  - "taste": Systembolagets smakstil. Rött: mjukt-barigt, fruktigt-smakrikt, kryddigt-mustigt, stramt-nyanserat. Vitt: friskt-fruktigt, fylligt-smakrikt. Rosé: fruktigt-smakrikt. Mousserande: torrt-vitt. Annars null.
+  - "grape": EN druva som den heter på Systembolaget (t.ex. "Riesling", "Pinot noir", "Sangiovese"), eller null om flera passar lika bra.
+  - "country": ett land på svenska (t.ex. "Italien"), eller null.
+  - "region": ett område inom landet om det tydligt passar bäst (t.ex. "Piemonte", "Bourgogne", "Rioja", "Mosel"), annars null.
+- "food": Systembolagets matsymbol som bäst beskriver rätten: aperitif, asiatiskt, buffemat, fisk, flask, fagel, gronsaker, kryddstarkt, lamm, not, ost, pasta, pizza, grillat, skaldjur eller vilt. Annars null.
+  - "lookFor": druvor eller områden och smakklockor (fyllighet, strävhet, fruktsyra, sötma, skala 1–12).
+- "priceTip": var det finns mest för pengarna i vår prisklass.
+- "nonAlcoholic": om inställningen säger det; "kind" är alkoholfritt-rott, alkoholfritt-vitt, alkoholfritt-mousserande, alkoholfri-ol eller annat (hemgjort).
+- ALLERGIER OCH ÄTER INTE gäller även här.`;
+const DRINKS_SCHEMA = { type: 'OBJECT', properties: {
+    drinks: { type: 'OBJECT', properties: { why: S_STR, approach: S_STRN, avoid: S_STRN, priceTip: S_STRN,
+      food: S_STRN,
+      options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: S_STR, taste: S_STRN, grape: S_STRN, country: S_STRN, region: S_STRN, lookFor: S_STRN, why: S_STRN, serve: S_STRN, pick: { type: 'BOOLEAN' } }, required: ['title', 'kind'] } },
+      nonAlcoholic: { type: 'OBJECT', nullable: true, properties: { title: S_STR, kind: S_STRN, why: S_STRN }, required: ['title'] } }, required: ['why'] },
+  }, required: ['drinks'] };
 // Kort format för enkla frågor om receptet som visas
 const LIGHT_RULES = `## APPENS SVARSFORMAT (måste följas)
 Det här är en snabb fråga under matlagningen (LÄGE 1). Svara ENDAST med ett JSON-objekt:
@@ -800,7 +804,7 @@ function prefsText(d) {
 - Självklarheter (finns alltid, räkna inte som inköp): ${GIVENS.join(', ')}
 - Skafferiet (det vi har hemma just nu, både basvaror och skafferivaror – använd fritt och räkna inte som inköp): ${pantryOf(P).join(', ') || '(tomt)'}
 - ${d.weekend ? 'Skafferi på HELG: använd fritt det rätten behöver för bästa resultat. Det som inte finns i skafferiet köper vi – sätt "pantry": false på det.' : 'Skafferi på VARDAG: bygg rätten på skafferiet plus vanliga färskvaror som finns i alla butiker (kött, fisk, kyckling, grönsaker, mejeri). Högst EN skafferivara (sås, krydda, konserv, torrvara) som inte finns i skafferiet – och ge då ett alternativ i ingrediensens "note". Gäller även förslagen.'}
-- Dryckestips: ${d.weekend || P.drinkWeekday ? `JA – fyll "drinks" i varje recept. Pris per flaska: ${(() => { const a = kr(P.drinkPriceFrom), b = kr(P.drinkPriceTo); return a && b ? `${Math.min(a, b)}–${Math.max(a, b)} kr` : b ? `upp till ${b} kr` : a ? `från ${a} kr` : 'valfritt' })()}${P.drinkNA ? '. Ge alltid ett alkoholfritt alternativ' : ''}${drinkArr(P, 'drinkLike').length ? `. Vi dricker helst: ${P.drinkLike.join(', ')} – lägg dem först och föreslå bara annat när maten verkligen kräver det (säg då varför)` : ''}${(P.drinkLikes || '').trim() ? `. Vi gillar: ${P.drinkLikes.trim()}` : ''}${(P.drinkAvoid || '').trim() ? `. Vi undviker: ${P.drinkAvoid.trim()}` : ''}${drinkArr(P, 'drinkRange').length ? `. Vi handlar gärna i: ${P.drinkRange.join(', ')}` : ''}` : 'nej – sätt "drinks" till null om vi inte ber om det'}`;
+- Dryckestips (bara när vi ber om dem): Pris per flaska: ${(() => { const a = kr(P.drinkPriceFrom), b = kr(P.drinkPriceTo); return a && b ? `${Math.min(a, b)}–${Math.max(a, b)} kr` : b ? `upp till ${b} kr` : a ? `från ${a} kr` : 'valfritt' })()}${P.drinkNA ? '. Ge alltid ett alkoholfritt alternativ' : ''}${drinkArr(P, 'drinkLike').length ? `. Vi dricker helst: ${P.drinkLike.join(', ')} – lägg dem först och föreslå bara annat när maten verkligen kräver det (säg då varför)` : ''}${(P.drinkLikes || '').trim() ? `. Vi gillar: ${P.drinkLikes.trim()}` : ''}${(P.drinkAvoid || '').trim() ? `. Vi undviker: ${P.drinkAvoid.trim()}` : ''}${drinkArr(P, 'drinkRange').length ? `. Vi handlar gärna i: ${P.drinkRange.join(', ')}` : ''}`;
 }
 function stripRecipe(r) {
   const { id, savedAt, updatedAt, notes, rating, cooked, ...rest } = r;
@@ -1031,7 +1035,7 @@ ${S.data.profile}
 
 ## IDAG
 ${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everything the user sees in natural English (keep kind, taste, food, grape, country and region values and note "kind" exactly as specified).')}`;
-  const prompt = `${opts.forceDrinks ? 'Vi vill ha dryckestips till den här rätten: fyll "drinks" även om Dryckestips säger nej.\n\n' : ''}Recept (${portionsFor(r)} portioner):\n${JSON.stringify(core)}`;
+  const prompt = `Recept (${portionsFor(r)} portioner):\n${JSON.stringify(core)}`;
   try {
     const o = S.settings.provider === 'claude' ? await claudeJSON(system, prompt) : await geminiJSON(prompt, { system, schema: EXTRAS_SCHEMA, temperature: 0.6, kind: 'extradelar' });
     if (S.current.recipe !== r) return;  // receptet har bytts under tiden
@@ -1042,8 +1046,7 @@ ${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everythi
       troubleshoot: o.troubleshoot?.length ? o.troubleshoot : r.troubleshoot,
       serveWith: o.serveWith?.length ? o.serveWith : r.serveWith,
       storage: o.storage || r.storage,
-      drinks: o.drinks || r.drinks,
-      spoken: typeof o.spoken === 'string' && o.spoken.trim() ? o.spoken : (r.spoken && r.spoken.sig === spokenSig(r) ? r.spoken : null) };
+      drinks: r.drinks, spoken: r.spoken && r.spoken.sig === spokenSig(r) ? r.spoken : null };
     normalizeRecipe(merged);
     Object.assign(r, merged);
     const sv = S.current.recipeSavedId && savedRecipe();
@@ -1056,6 +1059,26 @@ ${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everythi
     if (S.extrasFor === r) S.extrasFor = null;
     refresh();
   }
+}
+// Dryck på begäran (knappen i fliken Dryck)
+async function fetchDrinks(r) {
+  if (S.drinksFor === r) return;
+  S.drinksFor = r; S.drinksErr = null;
+  const refresh = () => { if (S.route.view === 'recipe' && S.current.recipe === r) keepScroll(renderStage); };
+  refresh();
+  const core = { title: r.title, origin: r.origin, servings: portionsFor(r), ingredients: r.ingredients.map(i => [i.amount, i.name].filter(Boolean).join(' ')), steps: r.steps.map(x => x.title || x.text.slice(0, 80)) };
+  const system = `${DRINKS_RULES}\n\n${prefsText(dayInfo())}${L('', '\n\nLANGUAGE: Write everything the user sees in natural English (keep kind, taste, food, grape, country and region values exactly as specified).')}`;
+  try {
+    const o = S.settings.provider === 'claude' ? await claudeJSON(system, JSON.stringify(core)) : await geminiJSON(JSON.stringify(core), { system, schema: DRINKS_SCHEMA, temperature: 0.6, kind: 'dryck' });
+    if (S.current.recipe !== r) return;
+    const tmp = normalizeRecipe({ ...r, drinks: o.drinks || null });
+    r.drinks = tmp.drinks;
+    if (!r.drinks) throw new Error(L('Souschefen gav inget dryckestips.', 'The sous-chef gave no drink suggestion.'));
+    const sv = S.current.recipeSavedId && savedRecipe();
+    if (sv && !S.current.dirty) { sv.drinks = r.drinks; touch(sv); }
+    saveData(); saveCurrent(); saveSession();
+  } catch (e) { if (S.current.recipe === r) S.drinksErr = e.message || String(e); }
+  finally { if (S.drinksFor === r) S.drinksFor = null; refresh(); }
 }
 async function claudeJSON(system, prompt) {
   const key = (S.settings.claudeKey || '').trim();
@@ -1543,7 +1566,7 @@ function viewRecipe() {
     <button class="only-split${cook ? ' on' : ''}" data-rtab="cook">${L('Laga', 'Cook')}</button>
     <button class="no-split${tab === 'ing' ? ' on' : ''}" data-rtab="ing">${L('Ingredienser', 'Ingredients')} <span>${checkedCount}/${r.ingredients.length}</span></button>
     <button class="no-split${tab === 'steps' ? ' on' : ''}" data-rtab="steps">${L('Gör så här', 'Method')} ${streamingSteps ? '<i class="tab-busy"></i>' : `<span>${doneCount}/${r.steps.length}</span>`}</button>
-    <button class="${tab === 'drink' ? 'on' : ''}" data-rtab="drink">${L('Dryck', 'Drinks')}${S.extrasFor === r && !r.drinks ? ' <i class="tab-busy"></i>' : ''}</button>
+    <button class="${tab === 'drink' ? 'on' : ''}" data-rtab="drink">${L('Dryck', 'Drinks')}${S.drinksFor === r ? ' <i class="tab-busy"></i>' : ''}</button>
     <button class="${tab === 'more' ? 'on' : ''}" data-rtab="more">${L('Mer', 'More')}${S.extrasFor === r ? ' <i class="tab-busy"></i>' : ''}</button>
   </nav>
   ${tab === 'drink' ? `<div class="r-pane" id="r-drink">${drinksPane(r)}</div>` : tab === 'more' ? `<div class="r-pane" id="r-more">${morePane(r, saved)}</div>` : `
@@ -1588,8 +1611,10 @@ function viewRecipe() {
 // Flikarna Dryck och Mer
 function drinksPane(r) {
   if (S.provisional === r) return `<section class="r-sec"><div class="extras-loading">${potSvg()}<span>${L('Dryckestipsen kommer när receptet är klart…', 'Drink suggestions come when the recipe is done…')}</span></div></section>`;
-  const busy = S.extrasFor === r;
-  return `<section class="r-sec" aria-label="${L('Dryck', 'Drinks')}">${!r.drinks && busy ? `<div class="extras-loading">${potSvg()}<span>${L('Souschefen funderar på dryck…', 'The sous-chef is thinking about drinks…')}</span></div>` : drinksBlock(r)}</section>`;
+  const busy = S.drinksFor === r;
+  return `<section class="r-sec" aria-label="${L('Dryck', 'Drinks')}">${busy ? `<div class="extras-loading">${potSvg()}<span>${L('Sommeliern funderar…', 'The sommelier is thinking…')}</span></div>` : ''}
+    ${S.drinksErr && !busy ? `<p class="wine-err">${esc(S.drinksErr)}</p>` : ''}
+    ${!busy ? drinksBlock(r) : ''}</section>`;
 }
 function morePane(r, saved) {
   if (S.provisional === r) return `<section class="r-sec"><div class="extras-loading">${potSvg()}<span>${L('Noter, tillbehör och förvaring kommer när receptet är klart…', 'Notes, sides and storage come when the recipe is done…')}</span></div></section>`;
@@ -1637,7 +1662,7 @@ function swapPanel(i, f) {
 // Efter stegen: om det går fel, servera med, förvaring – eller en knapp som kompletterar äldre recept
 function recipeAfter(r) {
   const busy = S.extrasFor === r;
-  const status = busy ? `<div class="extras-loading" aria-live="polite">${potSvg()}<span>${L('Souschefen skriver kockens noter, byten, tillbehör och dryck…', 'The sous-chef is writing chef\'s notes, swaps, sides and drinks…')}</span></div>`
+  const status = busy ? `<div class="extras-loading" aria-live="polite">${potSvg()}<span>${L('Souschefen skriver kockens noter, byten och tillbehör…', 'The sous-chef is writing chef\'s notes, swaps and sides…')}</span></div>`
     : S.extrasErr && S.current.recipe === r ? `<div class="enrich"><p class="hint">${L('Tipsen gick inte att hämta just nu.', 'The tips could not be fetched right now.')}</p><button class="ghost" data-extras>${L('Försök igen', 'Try again')}</button></div>` : '';
   return status + recipeAfterInner(r, busy);
 }
@@ -1704,8 +1729,7 @@ function sbLinks(o, dr) {
 }
 function drinksBlock(r) {
   const dr = r.drinks;
-  if (!dr && S.extrasFor === r) return '';
-  if (!dr) return `<div class="enrich"><button class="ghost" data-drinks>🍷 ${L('Föreslå dryck till maten', 'Suggest a drink')}</button></div>`;
+  if (!dr) return `<div class="enrich drinks-start"><p class="hint">${L('Souschefen resonerar som en sommelier: vad i rätten som styr valet, 2–3 alternativ i er prisklass och länkar till Systembolaget.', 'The sous-chef reasons like a sommelier: what in the dish drives the choice, 2–3 options in your price range and links to Systembolaget.')}</p><button class="btn" data-drinks>🍷 ${L('Föreslå dryck till maten', 'Suggest a drink')}</button></div>`;
   const card = o => { const ln = sbLinks(o, dr); return `<div class="drink">
       <strong>${esc(o.title)}${o.pick ? ` <span class="tag pick">${L('Sommelierens val', 'Sommelier\'s pick')}</span>` : ''}</strong>
       ${o.why ? `<span class="b-why">${esc(o.why)}</span>` : ''}
@@ -2626,7 +2650,7 @@ $('#stage').addEventListener('click', async e => {
   const pag = t.closest('[data-pantryallg]'); if (pag) { const g = S.pantrySugg?.[+pag.dataset.pantryallg]; if (g) { const P = S.data.prefs; g.items.forEach(x => { if (!isGiven(x) && !pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
   if (t.closest('[data-pantrysuggest]')) { suggestPantry(); return; }
   if (t.closest('[data-pantryadd]')) { const el = $('#pantryNew'); const v = (el?.value || '').trim(); if (v) { v.split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => { const P = S.data.prefs; if (!isGiven(x) && !pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
-  if (t.closest('[data-drinks]')) { if (S.current.recipe) fetchExtras(S.current.recipe, { forceDrinks: true }); return; }
+  if (t.closest('[data-drinks]')) { if (S.current.recipe) fetchDrinks(S.current.recipe); return; }
   if (t.closest('[data-extras]')) { if (S.current.recipe) fetchExtras(S.current.recipe); return; }
   if (t.closest('[data-enrich]') && S.current.recipe?.steps.some(x => x.title)) { fetchExtras(S.current.recipe); return; }
   if (t.closest('[data-enrich]')) { openChat(true); send(L('Komplettera receptet med "title" för varje steg, översikt, aktiv tid, det som måste göras i förväg, byten för ingredienser, valfria steg, om det går fel, servera med och förvaring. Ändra INTE ingredienserna eller stegens text. Skicka HELA receptet i "recipe".', 'Add a "title" to every step, an overview, active time, what must be done ahead, ingredient swaps, optional steps, troubleshooting, serve-with ideas and storage to the recipe. Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('Lägg till stegrubriker, översikt och tips', 'Add step headings, overview and tips'), enrich: true }); return; }
