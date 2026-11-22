@@ -296,6 +296,15 @@ const DEFAULT_PREFS = {
 const HAD_DATA = (() => { try { return !!localStorage.getItem('fk.data') || !!(JSON.parse(localStorage.getItem('fk.settings') || '{}').geminiKey); } catch { return false; } })();
 
 const S_STR = { type: 'STRING' }, S_STRN = { type: 'STRING', nullable: true }, S_ARR = { type: 'ARRAY', items: S_STR };
+const RECIPE_CORE_PROPS = {
+  title: S_STR, origin: S_STR, countries: S_ARR, source: S_STRN, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, servings: { type: 'INTEGER' }, intro: S_STR,
+  overview: S_ARR, activeTime: S_STRN, ahead: S_STRN,
+  ingredients: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, amount: S_STR, name: S_STR, note: S_STRN, group: S_STRN, pantry: { type: 'BOOLEAN' } }, required: ['id', 'amount', 'name'], propertyOrdering: ['id', 'amount', 'name', 'note', 'group', 'pantry'] } },
+  steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' }, howTo: S_STRN }, required: ['title', 'text'], propertyOrdering: ['title', 'text', 'uses', 'minutes', 'optional', 'howTo'] } },
+  health: { type: 'OBJECT', nullable: true, properties: { summary: S_STR, tips: S_ARR } },
+  tips: S_ARR,
+};
+// Huvudsvaret: chatt, förslag eller kärnreceptet (ingredienser och steg). Extradelarna hämtas efteråt (EXTRAS_SCHEMA).
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -304,27 +313,30 @@ const RESPONSE_SCHEMA = {
       name: S_STR, origin: S_STR, countries: S_ARR, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, difficulty: S_STR,
       why: S_STR, keyIngredients: S_ARR, equipment: S_STRN, healthier: { type: 'BOOLEAN' }, vegetarian: { type: 'BOOLEAN' } },
       required: ['name', 'origin', 'tag', 'time', 'why'] } },
-    recipe: { type: 'OBJECT', nullable: true, properties: {
-      title: S_STR, origin: S_STR, countries: S_ARR, source: S_STRN, tag: { type: 'STRING', enum: ['VARDAG', 'HELG'] }, time: S_STR, servings: { type: 'INTEGER' }, intro: S_STR,
-      overview: S_ARR, activeTime: S_STRN, ahead: S_STRN,
-      ingredients: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, amount: S_STR, name: S_STR, note: S_STRN, group: S_STRN, pantry: { type: 'BOOLEAN' },
-        swaps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, amount: S_STRN, why: S_STR }, required: ['name', 'why'] } } }, required: ['id', 'amount', 'name'] } },
-      steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' }, howTo: S_STRN }, required: ['title', 'text'] } },
-      health: { type: 'OBJECT', nullable: true, properties: { summary: S_STR, tips: S_ARR } },
-      tips: S_ARR, spoken: S_STRN,
-      troubleshoot: { type: 'ARRAY', items: { type: 'OBJECT', properties: { problem: S_STR, fix: S_STR }, required: ['problem', 'fix'] } },
-      serveWith: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, why: S_STRN }, required: ['name'] } },
-      storage: { type: 'OBJECT', nullable: true, properties: { fridge: S_STRN, freezer: S_STRN, leftovers: S_STRN } },
-      drinks: { type: 'OBJECT', nullable: true, properties: { why: S_STR, priceTip: S_STRN,
-        food: S_STRN,
-        options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: S_STR, taste: S_STRN, grape: S_STRN, country: S_STRN, region: S_STRN, lookFor: S_STRN, why: S_STRN }, required: ['title', 'kind'] } },
-        nonAlcoholic: { type: 'OBJECT', nullable: true, properties: { title: S_STR, kind: S_STRN, why: S_STRN }, required: ['title'] } }, required: ['why'] } },
-      required: ['title', 'ingredients', 'steps'] },
+    recipe: { type: 'OBJECT', nullable: true, properties: RECIPE_CORE_PROPS, required: ['title', 'ingredients', 'steps'], propertyOrdering: Object.keys(RECIPE_CORE_PROPS) },
     learn: S_ARR,
     offerUpdate: { type: 'BOOLEAN' },
   },
   required: ['reply'],
-  propertyOrdering: ['reply', 'suggestions', 'recipe', 'learn'],
+  propertyOrdering: ['reply', 'suggestions', 'recipe', 'learn', 'offerUpdate'],
+};
+// Enkla frågor om receptet som visas: bara text (ändringar går via knappen "Uppdatera receptet")
+const LIGHT_SCHEMA = { type: 'OBJECT', properties: { reply: S_STR, offerUpdate: { type: 'BOOLEAN' }, learn: S_ARR }, required: ['reply'], propertyOrdering: ['reply', 'offerUpdate', 'learn'] };
+// Receptets extradelar, hämtas i bakgrunden när receptet redan visas
+const EXTRAS_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    swaps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, amount: S_STRN, why: S_STR }, required: ['name', 'why'] } } }, required: ['id', 'options'] } },
+    troubleshoot: { type: 'ARRAY', items: { type: 'OBJECT', properties: { problem: S_STR, fix: S_STR }, required: ['problem', 'fix'] } },
+    serveWith: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, why: S_STRN }, required: ['name'] } },
+    storage: { type: 'OBJECT', nullable: true, properties: { fridge: S_STRN, freezer: S_STRN, leftovers: S_STRN } },
+    drinks: { type: 'OBJECT', nullable: true, properties: { why: S_STR, priceTip: S_STRN,
+      food: S_STRN,
+      options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: S_STR, taste: S_STRN, grape: S_STRN, country: S_STRN, region: S_STRN, lookFor: S_STRN, why: S_STRN }, required: ['title', 'kind'] } },
+      nonAlcoholic: { type: 'OBJECT', nullable: true, properties: { title: S_STR, kind: S_STRN, why: S_STRN }, required: ['title'] } }, required: ['why'] },
+    spoken: S_STRN,
+  },
+  propertyOrdering: ['swaps', 'troubleshoot', 'serveWith', 'storage', 'drinks', 'spoken'],
 };
 
 const FORMAT_RULES = `## APPENS SVARSFORMAT (måste följas)
@@ -336,34 +348,41 @@ Du svarar inuti en app. Svara ALLTID med exakt ett JSON-objekt – ingen text f�
     "title": "", "origin": "", "countries": ["MY"], "source": "länk till originalet" | null, "tag": "VARDAG" | "HELG", "time": "", "servings": 4, "intro": "1–2 meningar",
     "overview": ["Marinera kycklingen", "Stek den i samma panna", "Koka ihop såsen"],
     "activeTime": "40 min" | null, "ahead": "Marinera minst 3 h, gärna över natten" | null,
-    "ingredients": [ { "id": "i1", "amount": "300 g", "name": "kycklinglårfilé", "note": "i bitar" | null, "group": "Marinad" | null,
-      "pantry": false,
-      "swaps": [ { "name": "kycklingbröst", "amount": "300 g" | null, "why": "magrare, kortare stektid" } ] } ],
+    "ingredients": [ { "id": "i1", "amount": "300 g", "name": "kycklinglårfilé", "note": "i bitar" | null, "group": "Marinad" | null, "pantry": false } ],
     "steps": [ { "title": "Bryn kycklingen", "text": "Bryn 300 g kycklinglårfilé ...", "uses": ["i1"], "minutes": 8 | null, "optional": false, "howTo": "how to sear chicken thighs" | null } ],
     "health": { "summary": "≈45 g protein och 650 kcal per portion. …", "tips": ["konkret byte för den som vill äta lättare"] },
-    "tips": [""],
-    "spoken": "Det här är en krämig butter chicken som tar ungefär en timme…",
-    "troubleshoot": [ { "problem": "Såsen är för tunn", "fix": "Sjud utan lock 5–10 min." } ],
-    "serveWith": [ { "name": "Gurkraita", "why": "svalkar hettan" } ],
-    "storage": { "fridge": "3 dagar", "freezer": "3 månader, utan grädden" | null, "leftovers": "Fyll wraps med resterna" | null },
-    "drinks": { "why": "Tomatens syra kräver syra i glaset, och chilin gör strävt vin bittert.",
-      "food": "pasta" | null,
-      "options": [ { "title": "Syrligt, bärigt rött", "kind": "rott", "taste": "mjukt-barigt", "grape": "Barbera" | null, "country": "Italien" | null, "region": "Piemonte" | null, "lookFor": "Fruktsyra 8–10, strävhet under 6", "why": "Syran möter tomaten" } ],
-      "priceTip": "Under 120 kr: Piemonte och Sicilien ger mer än Toscana" | null,
-      "nonAlcoholic": { "title": "Alkoholfritt mousserande", "kind": "alkoholfritt-mousserande", "why": "Friskt mot det feta" } | null } | null
+    "tips": [""]
   },
   "learn": [ "kort ny lärdom om familjens smak/vanor" ],
   "offerUpdate": false
 }
 Regler:
 - LÄGE 3 (inspiration) → fyll "suggestions". LÄGE 2 (komplett recept, eller när jag ber dig ändra receptet som visas) → fyll "recipe" med HELA receptet. LÄGE 1 → båda null.
-- Receptets extra delar (kort, konkret, inget fyllnadsprat):
+- Receptets delar (kort, konkret, inget fyllnadsprat). Byten, felsökning, tillbehör, dryck, förvaring och uppläsning fylls i separat efteråt – skicka dem INTE här:
   - "overview": 2–3 korta rader om hur rätten görs, i ordning.
   - "activeTime": tid vid spisen. "time" är total tid inklusive väntan. "ahead": det som måste göras i förväg (marinering, blötläggning, deg som jäser, vila) med minsta och bästa tid, annars null.
   - "pantry": true om ingrediensen finns i SKAFFERIET (även med annat namn, t.ex. "rapsolja" = Neutral olja) eller är en SJÄLVKLARHET (se nedan, t.ex. salt, socker, matolja, smör, lök). Annars false.
-  - "swaps": bara för 2–5 ingredienser där ett byte är vanligt (svår att hitta, dyr, allergi, smak). 1–3 alternativ var med mängd och varför. Krockar aldrig med ALLERGIER OCH ÄTER INTE. Annars [].
   - "optional": true för steg som går att hoppa över utan att rätten faller (garnering, mixning, rostning av extra topping).
   - "howTo": för 1–3 tekniska moment som är lättare att se än att läsa (vika dumplings, filea fisk, temperera choklad, knåda deg): en kort YouTube-sökterm PÅ ENGELSKA. Annars null.
+- Varje steg har "title": 2–4 ord i imperativ som namnger momentet, t.ex. "Förbered grönsakerna", "Montera lasagnen", "Grädda i ugnen". Upprepa inte rubriken i "text". Även vid renskrivning.
+- I varje steg: skriv ut mängderna i texten och lista ingrediensernas id i "uses". "minutes" anges för steg med vänte-/tillagningstid.
+- "countries": ISO 3166-1 alfa-2-koder (versaler) för rättens ursprungsland, t.ex. ["MY"], ["FR","SE"] för fusion. Regionalt kök → huvudlandet (Sydamerikanskt ceviche → ["PE"]).
+- "group" används för att dela upp ingredienser (t.ex. "Marinad", "Sås", "Servering"); annars null.
+- "learn": bara NYA saker vi själva sagt eller tydligt visat (t.ex. "Barnen tycker inte om koriander", "Vi gillade mer chili i panangen"). Inga gissningar. Annars [].
+- Använd smakminnet och kokboken nedan för att träffa vår smak. Föreslå gärna variationer på rätter vi gett högt betyg.
+- Svara på svenska. Om info saknas: ställ motfrågan i "reply" och sätt suggestions/recipe till null.`;
+
+// Extradelarna hämtas i ett eget anrop när receptet redan visas
+const EXTRAS_RULES = `## UPPGIFT
+Receptet nedan visas redan i appen. Fyll i receptets extradelar. Ändra INTE receptet. Svara ENDAST med ett JSON-objekt:
+{ "swaps": [ { "id": "i1", "options": [ { "name": "kycklingbröst", "amount": "300 g" | null, "why": "magrare, kortare stektid" } ] } ],
+  "troubleshoot": [ { "problem": "Såsen är för tunn", "fix": "Sjud utan lock 5–10 min." } ],
+  "serveWith": [ { "name": "Gurkraita", "why": "svalkar hettan" } ],
+  "storage": { "fridge": "3 dagar", "freezer": "3 månader, utan grädden" | null, "leftovers": "Fyll wraps med resterna" | null } | null,
+  "drinks": { "why": "…", "food": "pasta" | null, "options": [ { "title": "Syrligt, bärigt rött", "kind": "rott", "taste": "mjukt-barigt", "grape": "Barbera" | null, "country": "Italien" | null, "region": "Piemonte" | null, "lookFor": "Fruktsyra 8–10, strävhet under 6", "why": "Syran möter tomaten" } ], "priceTip": "…" | null, "nonAlcoholic": { "title": "Alkoholfritt mousserande", "kind": "alkoholfritt-mousserande", "why": "Friskt mot det feta" } | null } | null,
+  "spoken": "…" }
+Regler (kort, konkret, inget fyllnadsprat):
+  - "swaps": lista med {"id": ingrediensens id, "options": [...]}, bara för 2–5 ingredienser där ett byte är vanligt (svår att hitta, dyr, allergi, smak). 1–3 alternativ var med mängd och varför. Krockar aldrig med ALLERGIER OCH ÄTER INTE. Övriga ingredienser utelämnas.
   - "troubleshoot": 2–3 vanliga problem för just den här rätten med konkret åtgärd.
   - "serveWith": 2–3 tillbehör som passar, med kort varför.
   - "drinks": se Dryckestips i INSTÄLLNINGAR. Inga specifika flaskor eller producenter – bara typ och stil, så att vi väljer själva på hyllan.
@@ -380,13 +399,15 @@ Regler:
     - "nonAlcoholic": om inställningen säger det; "kind" är alkoholfritt-rott, alkoholfritt-vitt, alkoholfritt-mousserande, alkoholfri-ol eller annat (hemgjort).
   - "spoken": en talad genomgång för uppläsning, 90–150 ord. Gå rakt på sak: nämn INTE rättens namn och beskriv eller sälj inte rätten (inga omdömen som "krämig", "god", "klassiker", ingen hälsning eller avrundning) – lyssnaren vet redan vad den lagar. Börja direkt med upplägget: total tid och det som måste göras i förväg. Sedan huvudmomenten i ordning med det som avgör resultatet (värme, tider, klartecken), och vad som kan göras parallellt. Avsluta med 1–2 tips som påverkar resultatet. Skriv som en vänlig kock pratar: korta meningar, inga listor, parenteser eller förkortningar ("matskedar", "grader", "minuter"). Skriv en ny när receptet ändras.
   - "storage": hållbarhet i kyl, om den går att frysa (och hur), och en idé för resterna. null om det inte är relevant (t.ex. en dryck).
-- Varje steg har "title": 2–4 ord i imperativ som namnger momentet, t.ex. "Förbered grönsakerna", "Montera lasagnen", "Grädda i ugnen". Upprepa inte rubriken i "text". Även vid renskrivning.
-- I varje steg: skriv ut mängderna i texten och lista ingrediensernas id i "uses". "minutes" anges för steg med vänte-/tillagningstid.
-- "countries": ISO 3166-1 alfa-2-koder (versaler) för rättens ursprungsland, t.ex. ["MY"], ["FR","SE"] för fusion. Regionalt kök → huvudlandet (Sydamerikanskt ceviche → ["PE"]).
-- "group" används för att dela upp ingredienser (t.ex. "Marinad", "Sås", "Servering"); annars null.
-- "learn": bara NYA saker vi själva sagt eller tydligt visat (t.ex. "Barnen tycker inte om koriander", "Vi gillade mer chili i panangen"). Inga gissningar. Annars [].
-- Använd smakminnet och kokboken nedan för att träffa vår smak. Föreslå gärna variationer på rätter vi gett högt betyg.
-- Svara på svenska. Om info saknas: ställ motfrågan i "reply" och sätt suggestions/recipe till null.`;
+- ALLERGIER OCH ÄTER INTE gäller även här.`;
+// Kort format för enkla frågor om receptet som visas
+const LIGHT_RULES = `## APPENS SVARSFORMAT (måste följas)
+Det här är en snabb fråga under matlagningen (LÄGE 1). Svara ENDAST med ett JSON-objekt:
+{ "reply": "svaret, max 3–5 meningar eller punkter, enkel markdown ok", "offerUpdate": false, "learn": [] }
+- "offerUpdate": true om svaret innebär att receptet borde ändras – appen visar då en knapp så vi kan uppdatera. Skicka aldrig receptet och skriv ALDRIG att receptet är ändrat.
+- "learn": bara NYA saker vi själva sagt eller tydligt visat om vår smak. Annars [].`;
+// Snabbare modeller för korta svar (chattfrågor, förslag); vanliga modellen som reserv
+const FAST_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 
 const DEFAULT_MODELS = { gemini: 'gemini-3.6-flash', claude: 'claude-sonnet-5-5' };
 const GEMINI_FALLBACKS = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
@@ -691,7 +712,7 @@ async function fileToImage(file) {
 }
 
 /* ============ System-prompt ============ */
-function buildSystem() {
+function buildSystem(opts = {}) {
   const d = dayInfo();
   const mem = S.data.memory.filter(m => !m.deleted).map(m => `- ${m.text}`).join('\n') || '- (inget ännu)';
   const book = S.data.recipes.slice()
@@ -718,9 +739,9 @@ ${S.data.profile}
 ## SMAKMINNE (det du lärt dig om oss)
 ${mem}
 
-## FAMILJENS KOKBOK (sparade rätter, betyg och våra anteckningar)
+${opts.light ? '' : `## FAMILJENS KOKBOK (sparade rätter, betyg och våra anteckningar)
 ${book}
-
+`}
 ## IDAG
 Idag är det ${d.name} ${d.date}. Säsong: ${season()}. Dagläge: ${d.label}${d.manual ? ' (valt manuellt)' : ''}, tidsram ${todayTime().label}.
 ${clockText()}
@@ -728,7 +749,7 @@ ${clockText()}
 ## DET SOM VISAS PÅ SKÄRMEN
 ${onScreen}
 
-${langRule()}`;
+${opts.light ? LIGHT_RULES + L('', '\n- LANGUAGE: Answer in English.') : langRule()}`;
 }
 function breadText(P) {
   const lab = (opts, k) => (opts.find(x => x[0] === k) || [, ''])[1];
@@ -779,8 +800,16 @@ function historyForModel() {
     return { role: 'assistant', text: JSON.stringify(o) };
   });
 }
-async function callModel(onProgress = () => {}) {
-  const sys = buildSystem();
+// Tidslogg: senaste anropen sparas i webbläsaren och visas under Inställningar → Avancerat
+function logTiming(t) {
+  t.at = now();
+  console.info('Souschefen tid', t);
+  const list = [t, ...LS.get('fk.timings', [])].slice(0, 12);
+  LS.set('fk.timings', list);
+}
+async function callModel(onProgress = () => {}, opts = {}) {
+  const sys = buildSystem(opts);
+  const T = { kind: opts.kind || 'chatt', t0: performance.now(), retries: 0 };
   const msgs = historyForModel();
   const p = S.settings.provider;
   if (p === 'claude') {
@@ -803,7 +832,7 @@ async function callModel(onProgress = () => {}) {
   if (!key) throw new Error('NOKEY');
   const lastUser = [...msgs].reverse().find(m => m.role === 'user');
   const hasLink = /https?:\/\/\S+/.test(lastUser?.text || '');
-  let schema = RESPONSE_SCHEMA, useTool = hasLink;
+  let schema = opts.light ? LIGHT_SCHEMA : RESPONSE_SCHEMA, useTool = hasLink;
   S.lastUrlFail = false; S.lastCut = false;
   let cutoffs = 0, bestPartial = '', lastFinish = '';
   const mkBody = thinking => JSON.stringify({
@@ -814,19 +843,21 @@ async function callModel(onProgress = () => {}) {
     generationConfig: { ...(useTool ? {} : { responseMimeType: 'application/json', responseSchema: schema }), temperature: 0.8, ...(thinking ? { thinkingConfig: { thinkingLevel: thinking } } : {}) },
   });
   // Prova vald modell först, sedan reservmodeller om den inte finns/inte ingår i gratisnivån
-  const models = [...new Set([S.settings.geminiModel || DEFAULT_MODELS.gemini, ...GEMINI_FALLBACKS])];
+  const models = [...new Set([...(opts.fast && !useTool ? FAST_MODELS : []), S.settings.geminiModel || DEFAULT_MODELS.gemini, ...GEMINI_FALLBACKS])];
   let lastErr = '';
   for (const model of models) {
+    T.model = model;
     // Minsta tänkande = snabbast. 3.8 klarar "low", övriga "minimal".
     let thinking = /3\.8|latest/.test(model) ? 'low' : 'minimal';
     for (let attempt = 0; attempt < 3; attempt++) {
       let res;
+      if (attempt || model !== models[0]) T.retries++;
       try {
         res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: mkBody(thinking) });
       } catch (e) { throw new Error(L('Kunde inte nå Google (nätverksfel). Kontrollera internetuppkopplingen.', 'Could not reach Google (network error). Check your internet connection.')); }
       if (res.ok) {
-        if (!cutoffs && model !== S.settings.geminiModel && !/överbelastad|kvot|overloaded|quota/.test(lastErr)) { S.settings.geminiModel = model; saveSettings(); }
+        if (!cutoffs && !FAST_MODELS.includes(model) && model !== S.settings.geminiModel && !/överbelastad|kvot|overloaded|quota/.test(lastErr)) { S.settings.geminiModel = model; saveSettings(); }
         const reader = res.body.getReader(); const dec = new TextDecoder();
         let buf = '', txt = '', finish = '', urlMeta = null;
         const readLine = raw => {
@@ -835,7 +866,7 @@ async function callModel(onProgress = () => {}) {
           try {
             const j = JSON.parse(line.slice(5));
             const c = j.candidates?.[0];
-            (c?.content?.parts || []).forEach(p => { if (!p.thought && p.text) txt += p.text; });
+            (c?.content?.parts || []).forEach(p => { if (!p.thought && p.text) { if (!T.first) T.first = performance.now(); txt += p.text; } });
             if (c?.finishReason) finish = c.finishReason;
             const um = c?.urlContextMetadata || c?.url_context_metadata;
             if (um) urlMeta = um.urlMetadata || um.url_metadata || urlMeta;
@@ -866,6 +897,7 @@ async function callModel(onProgress = () => {}) {
         S.lastUrlFail = false;
         if (useTool && Array.isArray(urlMeta) && urlMeta.length && !urlMeta.some(u => /SUCCESS/i.test(u.urlRetrievalStatus || u.url_retrieval_status || ''))) S.lastUrlFail = true;
         if (hasLink && !useTool) S.lastUrlFail = true;
+        logTiming({ kind: T.kind, model, first: T.first ? Math.round(T.first - T.t0) : null, total: Math.round(performance.now() - T.t0), retries: T.retries, chars: txt.length });
         return txt;
       }
       const j = await res.json().catch(() => ({}));
@@ -955,6 +987,68 @@ function recipeDiff(a, b) {
   return out;
 }
 const CLAIM_RE = /(i(?:'ve| have) (?:updated|changed|adjusted|replaced|added|removed)|has been (?:updated|changed|adjusted)|here is the (?:new|updated|revised)|uppdaterat|uppdaterade|uppdaterats|uppdaterar|ändrat|ändrade|ändrats|justerat|justerade|justerats|har bytt|bytt ut|bytts ut|lagt till|lagts till|tagit bort|tagits bort|här är (det|ditt|ert) (nya|ändrade|reviderade))/i;
+// Meddelanden som kan betyda att receptet ska ändras (eller att vi vill ha något nytt) går till det fulla formatet
+const CHANGE_RE = /(byt|ändra|gör om|göra om|lägg till|lägga till|ta bort|ersätt|uppdatera|skala|dubbla|halvera|portion|istället|i stället|annat recept|ny rätt|förslag|recept på|receptet på|vegetarisk version|swap|change|replace|update|add |remove|instead|servings|recipe for|suggest)|^\s*(ja|japp|kör|gör det|yes|ok|okej)\b/i;
+// Vid en ändring: flytta över extradelarna från förra versionen så att de syns tills nya hämtats
+function carryExtras(from, to) {
+  ['troubleshoot', 'serveWith', 'storage', 'drinks'].forEach(k => { if (to[k] == null || (Array.isArray(to[k]) && !to[k].length)) to[k] = from[k]; });
+  const byKey = new Map(from.ingredients.map(i => [(i.name || '').toLowerCase(), i]));
+  to.ingredients.forEach(i => { if (!i.swaps?.length) { const o = byKey.get((i.name || '').toLowerCase()); if (o?.swaps?.length) i.swaps = o.swaps; } });
+}
+// (A) Receptets extradelar: byten, om det går fel, servera med, förvaring, dryck och uppläsningstext
+async function fetchExtras(r, opts = {}) {
+  S.extrasFor = r; S.extrasErr = null;
+  const refresh = () => { if (S.route.view === 'recipe' && S.current.recipe === r) keepScroll(renderStage); };
+  refresh();
+  const core = stripRecipe(r);
+  ['troubleshoot', 'serveWith', 'storage', 'drinks', 'spoken'].forEach(k => delete core[k]);
+  core.ingredients = core.ingredients.map(({ swaps, ...i }) => i);
+  const d = dayInfo();
+  const system = `${EXTRAS_RULES}
+
+${prefsText(d)}
+
+## OM FAMILJEN (fritext)
+${S.data.profile}
+
+## IDAG
+${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everything the user sees in natural English (keep kind, taste, food, grape, country and region values exactly as specified).')}`;
+  const prompt = `${opts.forceDrinks ? 'Vi vill ha dryckestips till den här rätten: fyll "drinks" även om Dryckestips säger nej.\n\n' : ''}Recept (${portionsFor(r)} portioner):\n${JSON.stringify(core)}`;
+  try {
+    const o = S.settings.provider === 'claude' ? await claudeJSON(system, prompt) : await geminiJSON(prompt, { system, schema: EXTRAS_SCHEMA, temperature: 0.6, kind: 'extradelar' });
+    if (S.current.recipe !== r) return;  // receptet har bytts under tiden
+    const sw = new Map((Array.isArray(o.swaps) ? o.swaps : []).map(x => [String(x.id), x.options]));
+    const merged = { ...r,
+      ingredients: r.ingredients.map(i => ({ ...i, swaps: sw.has(i.id) ? sw.get(i.id) : i.swaps })),
+      troubleshoot: o.troubleshoot?.length ? o.troubleshoot : r.troubleshoot,
+      serveWith: o.serveWith?.length ? o.serveWith : r.serveWith,
+      storage: o.storage || r.storage,
+      drinks: o.drinks || r.drinks,
+      spoken: typeof o.spoken === 'string' && o.spoken.trim() ? o.spoken : (r.spoken && r.spoken.sig === spokenSig(r) ? r.spoken : null) };
+    normalizeRecipe(merged);
+    Object.assign(r, merged);
+    const sv = S.current.recipeSavedId && savedRecipe();
+    if (sv && !S.current.dirty) { Object.assign(sv, stripRecipe(r)); touch(sv); }
+    saveData(); saveCurrent(); saveSession();
+  } catch (e) {
+    console.warn('Extradelar', e);
+    if (S.current.recipe === r) S.extrasErr = e.message || String(e);
+  } finally {
+    if (S.extrasFor === r) S.extrasFor = null;
+    refresh();
+  }
+}
+async function claudeJSON(system, prompt) {
+  const key = (S.settings.claudeKey || '').trim();
+  if (!key) throw new Error('NOKEY');
+  const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: S.settings.claudeModel || DEFAULT_MODELS.claude, max_tokens: 4000, system, messages: [{ role: 'user', content: prompt }] }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.error?.message || `Claude svarade ${res.status}`);
+  const t = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+  return JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
+}
 // Signatur för Lyssna-sammanfattningen: ändras receptet skrivs en ny
 const spokenSig = r => ['s2', L('sv', 'en'), r.title, r.steps.length, r.steps.map(x => x.text).join('').length, r.ingredients.length].join('|');
 function normalizeRecipe(r) {
@@ -994,9 +1088,22 @@ function partialReply(acc) {
   if (!m) return '';
   try { return JSON.parse('"' + m[1].replace(/\\$/, '') + '"'); } catch { return m[1].replace(/\\n/g, '\n'); }
 }
-// Plockar ut de förslag som hunnit skrivas klart i den strömmande JSON:en
-function partialSuggestions(acc) {
-  const m = /"suggestions"\s*:\s*\[/.exec(acc);
+// Plockar ut de objekt i en lista som hunnit skrivas klart i den strömmande JSON:en
+function partialSuggestions(acc) { return partialArray(acc, 'suggestions', o => o.name); }
+function partialString(acc, key, from = 0) {
+  const m = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(acc.slice(from));
+  if (!m) return '';
+  try { return JSON.parse('"' + m[1] + '"'); } catch { return m[1]; }
+}
+function partialRecipe(acc) {
+  const at = acc.search(/"recipe"\s*:\s*\{/);
+  if (at < 0) return null;
+  const rest = acc.slice(at);
+  return { title: partialString(rest, 'title'), intro: partialString(rest, 'intro'), time: partialString(rest, 'time'),
+    ingredients: partialArray(rest, 'ingredients', o => o.name), steps: partialArray(rest, 'steps', o => o.text) };
+}
+function partialArray(acc, key, ok) {
+  const m = new RegExp(`"${key}"\\s*:\\s*\\[`).exec(acc);
   if (!m) return [];
   const out = []; let depth = 0, start = -1, inStr = false, esc_ = false;
   for (let i = m.index + m[0].length; i < acc.length; i++) {
@@ -1004,13 +1111,19 @@ function partialSuggestions(acc) {
     if (inStr) { if (esc_) esc_ = false; else if (c === '\\') esc_ = true; else if (c === '"') inStr = false; continue; }
     if (c === '"') inStr = true;
     else if (c === '{') { if (!depth) start = i; depth++; }
-    else if (c === '}') { depth--; if (!depth && start >= 0) { try { const o = JSON.parse(acc.slice(start, i + 1)); if (o && o.name) out.push(o); } catch { } start = -1; } }
+    else if (c === '}') { depth--; if (!depth && start >= 0) { try { const o = JSON.parse(acc.slice(start, i + 1)); if (o && ok(o)) out.push(o); } catch { } start = -1; } }
     else if (c === ']' && !depth) break;
   }
   return out;
 }
 function showProgress(acc, override) {
-  if (S.busy === 'flow' && !override && ['home', 'suggestions'].includes(S.route.view)) {
+  if (S.busy === 'flow' && !override && ['home', 'suggestions'].includes(S.route.view) && /"recipe"\s*:\s*\{/.test(acc)) {
+    const pr = partialRecipe(acc), old = S.partialRecipe;
+    if (pr && (pr.title || pr.ingredients.length) && (!old || old.title !== pr.title || old.ingredients.length !== pr.ingredients.length || old.steps.length !== pr.steps.length || (!old.intro && pr.intro))) {
+      S.partialRecipe = pr;
+      const sc = $('#stage').scrollTop; renderStage(); $('#stage').scrollTop = sc;
+    }
+  } else if (S.busy === 'flow' && !override && ['home', 'suggestions'].includes(S.route.view)) {
     const ps = partialSuggestions(acc);
     if (ps.length > (S.partialSugg?.length || 0)) {
       S.partialSugg = ps; S.partialIntro = partialReply(acc);
@@ -1034,10 +1147,14 @@ async function send(text, image, opts = {}) {
   S.readingHost = (() => { const l = (text.match(/https?:\/\/[^\s]+/) || [])[0]; try { return l ? new URL(l).hostname.replace(/^www\./, '') : ''; } catch { return ''; } })();
   const userMsg = { role: 'user', text: text || L('Vad kan jag laga av det här?', 'What can I cook with this?'), image, at: now(), hidden: flow, ...(opts.display ? { display: opts.display } : {}) };
   S.chat.push(userMsg);
-  S.busy = flow ? 'flow' : 'chat'; S.partialSugg = null; saveChat(); renderChat(true);
+  S.busy = flow ? 'flow' : 'chat'; S.partialSugg = null; S.partialRecipe = null; saveChat(); renderChat(true);
   if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
   try {
-    const raw = await callModel(showProgress);
+    // Enkla frågor om receptet som visas: kort instruktion och litet svarsformat (C) med snabb modell (D)
+    const light = !flow && !image && !opts.display && !opts.enrich && S.route.view === 'recipe' && !!S.current.recipe
+      && !CHANGE_RE.test(text) && !/https?:\/\//.test(text);
+    const kind = light ? 'chatt' : S.route.view === 'recipe' && !opts.newDish && !flow ? 'ändring' : opts.fast ? 'förslag' : 'recept';
+    const raw = await callModel(showProgress, { light, fast: light || !!opts.fast, kind });
     const o = parseReply(raw);
     const msg = { role: 'assistant', text: o.reply || '', at: now() };
     const linkInMsg = (text.match(/https?:\/\/[^\s]+/) || [])[0];
@@ -1054,6 +1171,7 @@ async function send(text, image, opts = {}) {
       const keepId = S.route.view === 'recipe' && !opts.newDish ? S.current.recipeSavedId : null;
       const sameDish = S.route.view === 'recipe' && !opts.newDish && S.current.recipe;
       const prevRecipe = sameDish ? S.current.recipe : null;
+      if (prevRecipe) carryExtras(prevRecipe, recipe);  // behåll tillbehör, dryck m.m. tills nya hämtats
       S.current.recipe = recipe; S.current.recipeSavedId = keepId; S.current.dirty = !!keepId;
       S.openSwap = null;
       if (!sameDish) { S.checked = {}; S.doneSteps = {}; S.activeStep = null; S.cookStart = null; newSession(); }
@@ -1061,8 +1179,10 @@ async function send(text, image, opts = {}) {
       if (!(S.portions && S.portions.title === recipe.title)) S.portions = null;
       msg.view = { recipe };
       if (flow) msg.hidden = true; else { const d = recipeDiff(prevRecipe, recipe); msg.updated = prevRecipe ? (d.length ? d : opts.enrich === 'drinks' ? [L('dryckestips är tillagda', 'drink suggestions are added')] : opts.enrich ? [L('rubriker, översikt och tips är tillagda', 'headings, overview and tips are added')] : 'same') : [L('nytt recept', 'new recipe')]; }
+      S.extrasFor = recipe; S.extrasErr = null;
       if (S.route.view !== 'recipe') go('recipe', { keepChat: true }); else { const sc = $('#stage').scrollTop; renderStage(); $('#stage').scrollTop = sc; }
       saveSession();
+      fetchExtras(recipe);  // (A) extradelarna i bakgrunden
     } else if (sugg) {
       S.current.suggestions = sugg; S.current.suggIntro = o.reply || '';
       msg.view = { suggestions: sugg };
@@ -1096,7 +1216,7 @@ async function send(text, image, opts = {}) {
     S.chat.push({ role: 'error', text: nokey ? L('Souschefen behöver en gratis Gemini-nyckel. Lägg in den under Inställningar.', 'The sous-chef needs a free Gemini key. Add it under Settings.') : L(`Det gick inte att nå souschefen: ${e.message}`, `Could not reach the sous-chef: ${e.message}`), nokey, at: now() });
     openChat(true);
   } finally {
-    S.busy = false; S.partialSugg = null; saveChat(); renderChat(true);
+    S.busy = false; S.partialSugg = null; S.partialRecipe = null; saveChat(); renderChat(true);
     if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
     if (!document.querySelector('.app[data-chat="open"]')) $('#chatDot').hidden = false;
   }
@@ -1232,6 +1352,7 @@ function viewHome() {
   const P = S.data.prefs;
   const t = todayTime();
   const hist = (S.data.history || []).slice(0, 5);
+  if (S.busy === 'flow' && S.partialRecipe) return viewRecipePreview();
   if (S.busy === 'flow' && S.partialSugg?.length) return viewSuggestions();
   if (S.busy === 'flow') {
     return `<section class="home"><div class="loading-stage">${potSvg()}<span id="stageStatus">${L('Souschefen tänker…', 'The sous-chef is thinking…')}</span></div></section>`;
@@ -1266,7 +1387,30 @@ function potSvg() {
   return `<svg class="pot" viewBox="0 0 48 48" aria-hidden="true"><path class="steam" d="M17 6c2 3-2 4 0 8" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/><path class="steam" d="M24 4c2 3-2 4 0 8" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/><path class="steam" d="M31 6c2 3-2 4 0 8" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M6 22h36v4a14 14 0 0 1-14 14h-8A14 14 0 0 1 6 26z" fill="currentColor"/><path d="M2 24h4M42 24h4" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`;
 }
 
+// Receptet medan det skrivs: titel, ingredienser och steg dyker upp efter hand
+function viewRecipePreview() {
+  const r = S.partialRecipe;
+  return `<article class="recipe preview" aria-busy="true">
+  <header class="r-head">
+    <h1>${esc(r.title || L('Receptet skrivs…', 'Writing the recipe…'))}</h1>
+    ${r.time ? `<div class="r-meta"><span>${esc(r.time)}</span></div>` : ''}
+    ${r.intro ? `<p class="r-intro">${esc(r.intro)}</p>` : ''}
+  </header>
+  <div class="r-split">
+  <section class="r-sec ingredients" aria-label="${L('Ingredienser', 'Ingredients')}">
+    <div class="sec-head"><h2>${L('Ingredienser', 'Ingredients')}</h2></div>
+    ${r.ingredients.map(i => `<div class="ing"><span class="amt">${esc(i.amount || '')}</span><span><span class="name">${esc(i.name)}</span>${i.note ? ` <span class="note">${esc(i.note)}</span>` : ''}</span></div>`).join('')}
+  </section>
+  <div class="r-main">
+  <section class="r-sec steps" aria-label="${L('Gör så här', 'Method')}">
+    <div class="sec-head"><h2>${L('Gör så här', 'Method')}</h2></div>
+    <ol>${r.steps.map((s, k) => `<li class="step" data-n="${k + 1}">${s.title ? `<h3 class="step-title">${esc(s.title)}</h3>` : ''}<div class="step-text">${esc(s.text)}</div></li>`).join('')}</ol>
+  </section></div></div>
+  <div class="preview-status" aria-live="polite">${potSvg()}<span id="stageStatus">${L('Souschefen skriver receptet…', 'The sous-chef is writing the recipe…')}</span></div>
+</article>`;
+}
 function viewSuggestions() {
+  if (S.busy === 'flow' && S.partialRecipe) return viewRecipePreview();
   const streaming = S.busy === 'flow' && S.partialSugg?.length;
   if (S.busy === 'flow' && !streaming) return `<section class="home"><div class="loading-stage">${potSvg()}<span id="stageStatus">${L('Souschefen tänker…', 'The sous-chef is thinking…')}</span></div></section>`;
   const list = streaming ? S.partialSugg : S.current.suggestions || [];
@@ -1398,8 +1542,15 @@ function swapPanel(i, f) {
 }
 // Efter stegen: om det går fel, servera med, förvaring – eller en knapp som kompletterar äldre recept
 function recipeAfter(r) {
+  const busy = S.extrasFor === r;
+  const status = busy ? `<div class="extras-loading" aria-live="polite">${potSvg()}<span>${L('Souschefen fyller på byten, tillbehör, dryck och tips…', 'The sous-chef is adding swaps, sides, drinks and tips…')}</span></div>`
+    : S.extrasErr && S.current.recipe === r ? `<div class="enrich"><p class="hint">${L('Tipsen gick inte att hämta just nu.', 'The tips could not be fetched right now.')}</p><button class="ghost" data-extras>${L('Försök igen', 'Try again')}</button></div>` : '';
+  return status + recipeAfterInner(r, busy);
+}
+function recipeAfterInner(r, busy) {
   const has = r.troubleshoot?.length || r.serveWith?.length || r.storage || r.overview?.length;
-  const enrich = !has || !r.steps.some(x => x.title) ? `<div class="enrich"><button class="ghost" data-enrich>${L('Lägg till stegrubriker, översikt och tips', 'Add step headings, overview and tips')}</button></div>` : '';
+  if (busy && !has) return '';
+  const enrich = !busy && (!has || !r.steps.some(x => x.title)) ? `<div class="enrich"><button class="ghost" data-enrich>${L('Lägg till stegrubriker, översikt och tips', 'Add step headings, overview and tips')}</button></div>` : '';
   if (!has) return drinksBlock(r) + enrich;
   const st = r.storage;
   return enrich + `${r.troubleshoot?.length ? `<div class="r-extra"><h3>${L('Om det går fel', 'If it goes wrong')}</h3><dl class="trouble">${r.troubleshoot.map(t => `<dt>${esc(t.problem)}</dt><dd>${esc(t.fix)}</dd>`).join('')}</dl></div>` : ''}
@@ -1456,6 +1607,7 @@ function sbLinks(o, dr) {
 }
 function drinksBlock(r) {
   const dr = r.drinks;
+  if (!dr && S.extrasFor === r) return '';
   if (!dr) return `<div class="enrich"><button class="ghost" data-drinks>🍷 ${L('Föreslå dryck till maten', 'Suggest a drink')}</button></div>`;
   const card = o => { const ln = sbLinks(o, dr); return `<div class="drink">
       <strong>${esc(o.title)}</strong>
@@ -1473,18 +1625,34 @@ function drinksBlock(r) {
   </div>`;
 }
 // Enkel JSON-fråga till Gemini (utan verktyg)
-async function geminiJSON(prompt) {
+async function geminiJSON(prompt, opts = {}) {
   const key = ((window.Cloud?.active() && Cloud.geminiKey()) || S.settings.geminiKey || '').trim();
   if (!key) throw new Error(L('Souschefen behöver en Gemini-nyckel. Lägg in den under Inställningar.', 'The sous-chef needs a Gemini key. Add it under Settings.'));
-  const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } });
-  let lastErr = '';
-  for (const model of [...new Set([S.settings.geminiModel || DEFAULT_MODELS.gemini, ...GEMINI_FALLBACKS])]) {
-    let res;
-    try { res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body }); }
-    catch { throw new Error(L('Kunde inte nå Google. Kontrollera internetuppkopplingen.', 'Could not reach Google. Check your internet connection.')); }
-    if (!res.ok) { const j = await res.json().catch(() => ({})); lastErr = res.status === 429 ? L('Gratiskvoten är slut för stunden.', 'The free quota is used up for now.') : `${model}: ${j.error?.message || res.status}`; if (/api key/i.test(lastErr)) break; continue; }
-    const c = (await res.json()).candidates?.[0], txt = (c?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('');
-    try { return JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch { lastErr = L('Svaret gick inte att tolka.', 'The answer could not be read.'); }
+  const mk = (schema, thinking) => JSON.stringify({ ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}), contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: 'application/json', ...(schema ? { responseSchema: schema } : {}), temperature: opts.temperature ?? 0.4, ...(thinking ? { thinkingConfig: { thinkingLevel: thinking } } : {}) } });
+  let lastErr = '', schema = opts.schema;
+  const t0 = performance.now();
+  for (const model of [...new Set([...(opts.fast ? FAST_MODELS : []), S.settings.geminiModel || DEFAULT_MODELS.gemini, ...GEMINI_FALLBACKS])]) {
+    let thinking = /3\.8|latest/.test(model) ? 'low' : 'minimal';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let res;
+      try { res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: mk(schema, thinking) }); }
+      catch { throw new Error(L('Kunde inte nå Google. Kontrollera internetuppkopplingen.', 'Could not reach Google. Check your internet connection.')); }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({})), msg = j.error?.message || '';
+        if (res.status === 400 && thinking && /think/i.test(msg)) { thinking = null; continue; }  // modellen godtar inte nivån
+        if (res.status === 400 && schema && /schema/i.test(msg)) { schema = undefined; continue; }
+        lastErr = res.status === 429 ? L('Gratiskvoten är slut för stunden.', 'The free quota is used up for now.') : `${model}: ${msg || res.status}`;
+        if (/api key/i.test(lastErr)) throw new Error(lastErr);
+        break;
+      }
+      const c = (await res.json()).candidates?.[0], txt = (c?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('');
+      try {
+        const o = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
+        if (opts.kind) logTiming({ kind: opts.kind, model, first: null, total: Math.round(performance.now() - t0), retries: 0, chars: txt.length });
+        return o;
+      } catch { lastErr = L('Svaret gick inte att tolka.', 'The answer could not be read.'); break; }
+    }
   }
   throw new Error(lastErr);
 }
@@ -2090,6 +2258,17 @@ function finishWelcome() {
   go('home');
 }
 
+// (E) Senaste svarstiderna: hjälper oss se om det är modellen, omförsöken eller gratisnivån som bromsar
+function timingsHtml() {
+  const list = LS.get('fk.timings', []);
+  if (!list.length) return '';
+  const sec = ms => ms == null ? '–' : (ms / 1000).toLocaleString(LOCALE(), { maximumFractionDigits: 1 }) + ' s';
+  const kinds = { chatt: L('Fråga', 'Question'), 'förslag': L('Förslag', 'Suggestions'), recept: L('Recept', 'Recipe'), 'ändring': L('Ändring', 'Change'), extradelar: L('Tips och dryck', 'Tips and drinks') };
+  return `<div class="field"><label>${L('Senaste svarstider', 'Recent response times')}</label>
+    <table class="timings"><thead><tr><th>${L('Vad', 'What')}</th><th>${L('Första ord', 'First word')}</th><th>${L('Totalt', 'Total')}</th><th>${L('Modell', 'Model')}</th><th>${L('Omförsök', 'Retries')}</th></tr></thead><tbody>
+    ${list.slice(0, 8).map(t => `<tr><td>${esc(kinds[t.kind] || t.kind)}</td><td>${sec(t.first)}</td><td>${sec(t.total)}</td><td>${esc(String(t.model || '').replace(/^gemini-/, ''))}</td><td>${t.retries || 0}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
 function viewSettings() {
   const s = S.settings, p = s.provider;
   const mem = S.data.memory.filter(m => !m.deleted);
@@ -2108,6 +2287,7 @@ function viewSettings() {
         ${s[keyField] ? `<button class="ghost" data-sharelink>${L('Kopiera länk till annan enhet', 'Copy link to another device')}</button>` : ''}</div>
       ${s[keyField] ? `<p class="hint" style="margin:10px 0 0">${L('Länken innehåller nycklarna. Skicka den bara till er själva.', 'The link contains your keys. Only send it to yourselves.')}</p>` : ''}`;
   const advanced = `
+      ${timingsHtml()}
       <div class="field"><label>${L('Tema', 'Theme')}</label><div class="seg" role="group">${[['auto', L('Som enheten', 'Match device')], ['light', L('Ljust', 'Light')], ['dark', L('Mörkt', 'Dark')]].map(([k, l]) => `<button type="button" data-theme="${k}" aria-pressed="${s.theme === k}">${l}</button>`).join('')}</div></div>
       <div class="field"><label>${L('AI-tjänst', 'AI service')}</label>
         <div class="seg" role="group"><button type="button" data-prov="gemini" aria-pressed="${p === 'gemini'}">Google Gemini</button><button type="button" data-prov="claude" aria-pressed="${p === 'claude'}">Anthropic Claude</button></div></div>
@@ -2151,7 +2331,7 @@ function bindStage() {
       const link = (q.match(/https?:\/\/[^\s]+/) || [])[0];
       if (link) q = L(`Renskriv receptet från länken: ${link}`, `Clean up the recipe from this link: ${link}`) + (q.replace(link, '').trim() ? L(`\nÖnskemål: `, `\nRequests: `) + q.replace(link, '').trim() : '');
       else if (q.length > 250 && q.split('\n').length > 4) q = L(`Renskriv det här receptet:\n${q}`, `Clean up this recipe:\n${q}`);
-      send(q || (img ? L('Det här har vi hemma. Ge förslag.', 'This is what we have at home. Give suggestions.') : ''), img, { flow: true });
+      send(q || (img ? L('Det här har vi hemma. Ge förslag.', 'This is what we have at home. Give suggestions.') : ''), img, { flow: true, fast: !/recept på|receptet på|recipe for/i.test(q || '') });
     };
     const updAsk = () => {
       const v = $('#homeInput').value, isLink = /https?:\/\/\S+/.test(v), isPaste = v.length > 250 && v.split('\n').length > 4;
@@ -2197,10 +2377,10 @@ $('#stage').addEventListener('click', async e => {
   const lg = t.closest('[data-lang]');
   if (lg) { setLang(lg.dataset.lang); return; }
   const q = t.closest('[data-quick]');
-  if (q) { send(q.dataset.quick, null, { flow: true }); return; }
+  if (q) { send(q.dataset.quick, null, { flow: true, fast: true }); return; }
   const pick = t.closest('[data-pick]');
   if (pick) { const s = S.current.suggestions[+pick.dataset.pick]; send(L(`Ge mig det kompletta receptet på ${s.name}.`, `Give me the complete recipe for ${s.name}.`), null, { flow: true }); return; }
-  if (t.closest('[data-more]')) { send(L('Ge mig fler förslag, gärna åt ett annat håll.', 'Give me more suggestions, ideally in a different direction.'), null, { flow: true }); return; }
+  if (t.closest('[data-more]')) { send(L('Ge mig fler förslag, gärna åt ett annat håll.', 'Give me more suggestions, ideally in a different direction.'), null, { flow: true, fast: true }); return; }
 
   // Recept: byten, valfria steg, tillbehör, komplettering
   const so = t.closest('[data-swapopen]');
@@ -2235,7 +2415,9 @@ $('#stage').addEventListener('click', async e => {
   const pag = t.closest('[data-pantryallg]'); if (pag) { const g = S.pantrySugg?.[+pag.dataset.pantryallg]; if (g) { const P = S.data.prefs; g.items.forEach(x => { if (!isGiven(x) && !pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
   if (t.closest('[data-pantrysuggest]')) { suggestPantry(); return; }
   if (t.closest('[data-pantryadd]')) { const el = $('#pantryNew'); const v = (el?.value || '').trim(); if (v) { v.split(/[,\n]/).map(x => x.trim()).filter(Boolean).forEach(x => { const P = S.data.prefs; if (!isGiven(x) && !pantryOf(P).some(y => fold(y) === fold(x))) P.pantry = [...pantryOf(P), x]; }); prefsChanged(); keepScroll(renderStage); } return; }
-  if (t.closest('[data-drinks]')) { openChat(true); send(L('Föreslå dryck till receptet: fyll "drinks" enligt Dryckestips (varför, 2–3 alternativ med typ, smakstil, druva och vad man letar efter, prisråd och ett alkoholfritt alternativ – inga specifika flaskor). Ändra INTE ingredienserna eller stegen. Skicka HELA receptet i "recipe".', 'Suggest drinks for the recipe: fill "drinks" (why, 2–3 options with kind, taste, grape and what to look for, a price tip and an alcohol-free option – no specific bottles). Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('🍷 Föreslå dryck', '🍷 Suggest a drink'), enrich: 'drinks' }); return; }
+  if (t.closest('[data-drinks]')) { if (S.current.recipe) fetchExtras(S.current.recipe, { forceDrinks: true }); return; }
+  if (t.closest('[data-extras]')) { if (S.current.recipe) fetchExtras(S.current.recipe); return; }
+  if (t.closest('[data-enrich]') && S.current.recipe?.steps.some(x => x.title)) { fetchExtras(S.current.recipe); return; }
   if (t.closest('[data-enrich]')) { openChat(true); send(L('Komplettera receptet med "title" för varje steg, översikt, aktiv tid, det som måste göras i förväg, byten för ingredienser, valfria steg, "howTo" för svåra moment, om det går fel, servera med och förvaring. Ändra INTE ingredienserna eller stegens text. Skicka HELA receptet i "recipe".', 'Add a "title" to every step, an overview, active time, what must be done ahead, ingredient swaps, optional steps, "howTo" for tricky techniques, troubleshooting, serve-with ideas and storage to the recipe. Do NOT change the ingredients or the steps. Send the WHOLE recipe in "recipe".'), null, { display: L('Lägg till stegrubriker, översikt och tips', 'Add step headings, overview and tips'), enrich: true }); return; }
   // Recept
   const chk = t.closest('[data-check]');

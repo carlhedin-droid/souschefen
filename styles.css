@@ -851,3 +851,13 @@ a.howto { text-decoration: none; color: var(--ink); }
 .sugg .btn[disabled] { opacity: .45; cursor: progress; }
 @media (prefers-reduced-motion: no-preference) { .sugg-grid > .sugg:last-of-type { animation: suggIn .35s ease-out; } }
 @keyframes suggIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* Receptet medan det skrivs, och extradelarna som fylls på */
+.recipe.preview .ing { display: flex; gap: 12px; padding: 8px 10px; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); animation: fadeIn .25s ease; }
+.recipe.preview .step { animation: fadeIn .25s ease; }
+.preview-status, .extras-loading { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--muted, #888); }
+.preview-status .pot, .extras-loading .pot { width: 28px; height: 28px; flex: none; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.timings { width: 100%; border-collapse: collapse; font-size: .85em; }
+.timings th, .timings td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); }
+.timings th { font-weight: 600; }
