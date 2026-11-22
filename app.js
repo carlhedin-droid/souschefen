@@ -326,8 +326,8 @@ const NOTE_KINDS = ['val', 'teknik', 'byte', 'inkop', 'forvag', 'lattare', 'genv
 const EXTRAS_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    notes: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: { type: 'STRING', enum: NOTE_KINDS }, text: S_STR, ings: S_ARR, steps: { type: 'ARRAY', items: { type: 'INTEGER' } } },
-      required: ['title', 'kind', 'text'], propertyOrdering: ['title', 'kind', 'text', 'ings', 'steps'] } },
+    notes: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: { type: 'STRING', enum: NOTE_KINDS }, text: S_STR, ings: S_ARR, steps: { type: 'ARRAY', items: { type: 'INTEGER' } }, switchTo: S_STRN },
+      required: ['title', 'kind', 'text'], propertyOrdering: ['title', 'kind', 'text', 'ings', 'steps', 'switchTo'] } },
     swaps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, amount: S_STRN, why: S_STR }, required: ['name', 'why'] } } }, required: ['id', 'options'] } },
     troubleshoot: { type: 'ARRAY', items: { type: 'OBJECT', properties: { problem: S_STR, fix: S_STR }, required: ['problem', 'fix'] } },
     serveWith: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, why: S_STRN }, required: ['name'] } },
@@ -371,7 +371,7 @@ Regler:
 // Extradelarna hämtas i ett eget anrop när receptet redan visas
 const EXTRAS_RULES = `## UPPGIFT
 Receptet nedan visas redan i appen. Fyll i receptets extradelar. Ändra INTE receptet. Svara ENDAST med ett JSON-objekt:
-{ "notes": [ { "title": "Lårfilé eller bröst?", "kind": "val", "text": "…", "ings": ["i1"], "steps": [2] } ],
+{ "notes": [ { "title": "Lårfilé eller bröst?", "kind": "val", "text": "…", "ings": ["i1"], "steps": [2], "switchTo": "kycklingbröst" | null } ],
   "swaps": [ { "id": "i1", "options": [ { "name": "kycklingbröst", "amount": "300 g" | null, "why": "magrare, kortare stektid" } ] } ],
   "troubleshoot": [ { "problem": "Såsen är för tunn", "fix": "Sjud utan lock 5–10 min." } ],
   "serveWith": [ { "name": "Gurkraita", "why": "svalkar hettan" } ],
@@ -381,6 +381,8 @@ Regler (kort, konkret, inget fyllnadsprat):
     - "kind": "val" (2–3 sätt att göra; vad som skiljer i smak, tid och disk; säg vilket du rekommenderar för oss och varför), "teknik" (varför steget görs så, vad som händer om man hoppar över det, klartecken), "byte" (vad ingrediensen gör i rätten, bästa ersättning och vad man förlorar), "inkop" (var den finns i Sverige – vilken hylla på ICA/Coop eller asiatisk butik, vad den heter på förpackningen, vad man ska titta efter), "forvag" (vad som kan göras i förväg och hur länge det håller), "lattare" (lättare variant och vad det kostar i smak), "genvag" (färdigköpt eller snabbare väg och vad det kostar i smak).
     - "text": 2–4 meningar. Konkreta siffror (tid, temperatur, mängd). Fokus på smak per insats. Ge en tydlig rekommendation, inte bara alternativ. Påstå aldrig att du själv har provlagat; luta dig mot etablerad kockkunskap och säg när det är smaksak.
     - "ings": id på ingredienserna noten gäller. "steps": stegnummer noten gäller (1 = första steget). Minst ett av dem. Alla tips hör hemma i noterna – det finns ingen separat tipslista.
+    - "switchTo": när noten föreslår ett ANNAT val än receptet (annan ingrediens, teknik eller variant): kort vad receptet ska ändras till, t.ex. "kycklingbröst", "ugnsbaka i stället för att fritera". Annars null.
+    - "val"-noter visas vid ingredienslistan, övriga typer vid stegen – ange därför "steps" för allt som inte är ett val av ingrediens.
   - "swaps": lista med {"id": ingrediensens id, "options": [...]}, bara för 2–5 ingredienser där ett byte är vanligt (svår att hitta, dyr, allergi, smak). 1–3 alternativ var med mängd och varför. Krockar aldrig med ALLERGIER OCH ÄTER INTE. Övriga ingredienser utelämnas.
   - "troubleshoot": 2–3 vanliga problem för just den här rätten med konkret åtgärd.
   - "serveWith": 2–3 tillbehör som passar, med kort varför.
@@ -1107,7 +1109,7 @@ function normalizeRecipe(r) {
     : r.spoken && typeof r.spoken.text === 'string' && r.spoken.text.trim() ? { text: r.spoken.text, sig: String(r.spoken.sig || '') } : null;
   r.activeTime = str(r.activeTime); r.ahead = str(r.ahead);
   r.notes = arr(r.notes).filter(n => n && str(n.title) && str(n.text)).slice(0, 8).map(n => ({ title: str(n.title), text: str(n.text), kind: NOTE_KINDS.includes(n.kind) ? n.kind : 'teknik',
-    ings: arr(n.ings).map(String), steps: arr(n.steps).map(Number).filter(x => x > 0) }));
+    ings: arr(n.ings).map(String), steps: arr(n.steps).map(Number).filter(x => x > 0), switchTo: str(n.switchTo) }));
   r.troubleshoot = arr(r.troubleshoot).filter(t => t && str(t.problem) && str(t.fix)).slice(0, 4).map(t => ({ problem: str(t.problem), fix: str(t.fix) }));
   r.serveWith = arr(r.serveWith).filter(t => t && str(t.name)).slice(0, 4).map(t => ({ name: str(t.name), why: str(t.why) }));
   const st = r.storage && typeof r.storage === 'object' ? { fridge: str(r.storage.fridge), freezer: str(r.storage.freezer), leftovers: str(r.storage.leftovers) } : null;
@@ -1635,24 +1637,32 @@ function recipeTop(r) {
 // Kockens noter: markörer vid ingredienser och steg, noten fälls ut på plats (ingen scrollning)
 const NOTE_LABEL = { val: ['Val', 'Choice'], teknik: ['Teknik', 'Technique'], byte: ['Byte', 'Swap'], inkop: ['Inköp', 'Shopping'], forvag: ['I förväg', 'Make ahead'], lattare: ['Lättare', 'Lighter'], genvag: ['Genväg', 'Shortcut'] };
 const noteLabel = k => L(...(NOTE_LABEL[k] || NOTE_LABEL.teknik));
+// Var en not visas: Val-noter vid ingrediensen; övriga vid sina steg – eller vid första steget som använder ingrediensen
+function noteSteps(r, n) {
+  if (n.steps.length) return n.steps;
+  if (n.kind === 'val' || !n.ings.length) return [];
+  const k = r.steps.findIndex(st => (st.uses || []).some(u => n.ings.includes(u)));
+  return k >= 0 ? [k + 1] : [];
+}
+const notePlaced = (r, n) => (n.kind === 'val' && n.ings.some(id => r.ingredients.some(i => i.id === id))) || noteSteps(r, n).some(x => x <= r.steps.length);
 function noteRefs(r, where) {
-  const ks = (r.notes || []).map((n, k) => [n, k]).filter(([n]) => where.ing ? n.ings.includes(where.ing) : n.steps.includes(where.step)).map(([, k]) => k);
-  return ks.map(k => `<button type="button" class="note-ref" data-noteref="${k}" data-where="${where.ing ? 'i:' + esc(where.ing) : 's:' + where.step}" aria-expanded="${S.openNote === k + '|' + (where.ing ? 'i:' + where.ing : 's:' + where.step)}" title="${esc(r.notes[k].title)}">${L('Not', 'Note')} ${k + 1}</button>`).join('');
+  const key = where.ing ? 'i:' + where.ing : 's:' + where.step;
+  const ks = (r.notes || []).map((n, k) => [n, k]).filter(([n]) => where.ing ? n.kind === 'val' && n.ings.includes(where.ing) : noteSteps(r, n).includes(where.step)).map(([, k]) => k);
+  return ks.map(k => { const n = r.notes[k]; return `<button type="button" class="note-ref k-${n.kind}" data-noteref="${k}" data-where="${esc(key)}" aria-expanded="${S.openNote === k + '|' + key}" title="${esc(n.title)}">${esc(noteLabel(n.kind))}</button>`; }).join('');
 }
 function noteInline(r, where) {
   const key = where.ing ? 'i:' + where.ing : 's:' + where.step;
   const m = /^(\d+)\|(.*)$/.exec(S.openNote || '');
   if (!m || m[2] !== key) return '';
   const n = r.notes?.[+m[1]]; if (!n) return '';
-  return `<div class="note-pop"><span class="tag note-kind">${esc(noteLabel(n.kind))}</span><strong>${esc(n.title)}</strong><div>${md(n.text)}</div></div>`;
+  return `<div class="note-pop"><strong>${esc(n.title)}</strong><div>${md(n.text)}</div>${n.switchTo ? `<button type="button" class="ghost note-switch" data-noteswitch="${+m[1]}">${L('Byt till', 'Switch to')} ${esc(n.switchTo)}</button>` : ''}</div>`;
 }
 function notesSection(r) {
   if (!r.notes?.length) return S.extrasFor === r ? '' : `<div class="enrich"><button class="ghost" data-extras>${L('Lägg till kockens noter', 'Add chef\'s notes')}</button></div>`;
   // Noter som visas vid en ingrediens eller ett steg upprepas inte här – bara de som saknar plats i receptet
-  const ingIds = new Set(r.ingredients.map(i => i.id)), nSteps = r.steps.length;
-  const loose = r.notes.map((n, k) => [n, k]).filter(([n]) => !n.ings.some(id => ingIds.has(id)) && !n.steps.some(x => x <= nSteps));
+  const loose = r.notes.map((n, k) => [n, k]).filter(([n]) => !notePlaced(r, n));
   if (!loose.length) return '';
-  return `<div class="r-notes" id="r-notes"><h3>${L('Fler noter från kocken', 'More notes from the chef')}</h3><ol>${loose.map(([n, k]) => `<li id="note-${k}"><span class="note-n">${k + 1}</span><div><span class="tag note-kind">${esc(noteLabel(n.kind))}</span><strong>${esc(n.title)}</strong><div>${md(n.text)}</div></div></li>`).join('')}</ol></div>`;
+  return `<div class="r-notes" id="r-notes"><h3>${L('Fler noter från kocken', 'More notes from the chef')}</h3><ol>${loose.map(([n, k]) => `<li id="note-${k}"><span class="tag note-kind">${esc(noteLabel(n.kind))}</span><div><strong>${esc(n.title)}</strong><div>${md(n.text)}</div></div></li>`).join('')}</ol></div>`;
 }
 function swapPanel(i, f) {
   return `<div class="swaps" role="group" aria-label="${L(`Byt ut ${esc(i.name)}`, `Swap ${esc(i.name)}`)}">${i.swaps.map((w, k) => `
@@ -2609,6 +2619,8 @@ $('#stage').addEventListener('click', async e => {
   // Recept: kockens noter, byten, valfria steg, tillbehör, komplettering
   const nr = t.closest('[data-noteref]');
   if (nr) { e.preventDefault(); e.stopPropagation(); const key = nr.dataset.noteref + '|' + nr.dataset.where; S.openNote = S.openNote === key ? null : key; keepScroll(renderStage); return; }
+  const nsw = t.closest('[data-noteswitch]');
+  if (nsw) { const n = S.current.recipe?.notes?.[+nsw.dataset.noteswitch]; if (n) { S.openNote = null; openChat(true); send(L(`Ändra receptet enligt kockens not "${n.title}": byt till ${n.switchTo}. Justera mängder och steg efter det och skicka HELA receptet i "recipe".`, `Change the recipe according to the chef's note "${n.title}": switch to ${n.switchTo}. Adjust amounts and steps and send the WHOLE recipe in "recipe".`), null, { display: L(`Byt till ${n.switchTo}`, `Switch to ${n.switchTo}`) }); } return; }
   if (t.closest('.note-pop')) return;
   const so = t.closest('[data-swapopen]');
   if (so) { e.preventDefault(); S.openSwap = S.openSwap === so.dataset.swapopen ? null : so.dataset.swapopen; keepScroll(renderStage); return; }

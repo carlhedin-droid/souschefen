@@ -955,3 +955,7 @@ a.howto { text-decoration: none; color: var(--ink); }
 .step.done:hover, .step.active.done { opacity: .85; }
 .step-done { font-weight: 700; }
 .stage.split .step:not(.active) .step-text { font-size: 15px; }
+
+.note-switch { margin-top: 8px; min-height: 34px; padding: 4px 14px; font-size: 14px; font-weight: 700; }
+.r-notes li { align-items: baseline; }
+.r-notes li strong { margin-left: 0; }
