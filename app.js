@@ -2633,7 +2633,7 @@ function updateCount() {
   if (b) b.textContent = `${r.steps.filter((_, n) => S.doneSteps[n]).length}/${r.steps.length}`;
 }
 function keepScroll(fn) {
-  const els = ['#stage', '#r-ing', '#r-steps', '.r-main'].map(q => [q, $(q)?.scrollTop || 0]);
+  const els = ['#stage', '#r-ing', '#r-steps', '.r-main', '.sheet-body'].map(q => [q, $(q)?.scrollTop || 0]);
   fn();
   els.forEach(([q, top]) => { const el = $(q); if (el) el.scrollTop = top; });
 }
