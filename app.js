@@ -1514,7 +1514,7 @@ function viewRecipe() {
         <input type="checkbox" ${S.checked[i.id] ? 'checked' : ''} data-check="${esc(i.id)}">
         <span class="amt">${esc(scaleAmount(i.amount, f))}</span>
         <span><span class="name">${esc(i.name)}</span>${i.note ? ` <span class="note">${esc(i.note)}</span>` : ''}</span>
-        ${noteRefs(r, { ing: i.id })}${i.swaps?.length ? `<button type="button" class="swap-btn" data-swapopen="${esc(i.id)}" aria-expanded="${S.openSwap === i.id}">${L('Byt', 'Swap')}</button>` : ''}
+        ${(() => { const b = noteRefs(r, { ing: i.id }) + (i.swaps?.length ? `<button type="button" class="swap-btn" data-swapopen="${esc(i.id)}" aria-expanded="${S.openSwap === i.id}">${L('Byt', 'Swap')}</button>` : ''); return b ? `<span class="ing-btns">${b}</span>` : ''; })()}
       </label>${noteInline(r, { ing: i.id })}${i.swaps?.length && S.openSwap === i.id ? swapPanel(i, f) : ''}`).join('')}</div>`).join('')}
     <div class="ing-actions"><button class="btn start-cook" data-startcook>${L('Allt är framme – börja laga', 'Everything is out – start cooking')}</button>
       <button class="ghost shop-open" data-shopopen>🛒 ${L('Till inköpslistan', 'To shopping list')}</button></div>

@@ -246,7 +246,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.12; margin: 0; let
 
 .ingredients .group-label { font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--pandan); margin: 18px 0 2px; }
 .ing {
-  display: grid; grid-template-columns: 28px minmax(84px, max-content) 1fr; gap: 12px; align-items: baseline;
+  display: grid; grid-template-columns: 28px minmax(84px, max-content) 1fr auto; gap: 12px; align-items: baseline;
   padding: 12px 8px; margin: 0 -8px; border-radius: var(--r-sm); cursor: pointer; user-select: none;
   border-bottom: 1px solid var(--line); font-size: 18px;
 }
@@ -367,7 +367,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.12; margin: 0; let
   .home h1 { margin-top: 0; }
   .r-sec { padding: 16px 16px 18px; border-radius: 14px; }
   .r-jump { top: -18px; padding-top: 24px; margin-bottom: 12px; }
-  .ing { font-size: 17px; grid-template-columns: 26px minmax(70px, max-content) 1fr; gap: 10px; }
+  .ing { font-size: 17px; grid-template-columns: 26px minmax(70px, max-content) 1fr auto; gap: 10px; }
   .step { grid-template-columns: 34px 1fr; gap: 6px 10px; }
   .step::before { font-size: 28px; }
   .step-text { font-size: 17.5px; }
@@ -674,7 +674,6 @@ a.howto { text-decoration: none; color: var(--ink); }
 .serve-btn span { font-size: 14px; color: var(--muted); }
 .serve-btn:hover { border-color: var(--pandan); }
 .enrich { margin-top: 22px; }
-.ing:has(.swap-btn) { grid-template-columns: 28px minmax(84px, max-content) 1fr auto; }
 .step[data-n]::before { content: attr(data-n); }
 
 /* ============ Dryck (nov 2026) ============ */
@@ -880,3 +879,24 @@ a.howto { text-decoration: none; color: var(--ink); }
 .step > .note-pop { grid-column: 2; margin: 0; }
 .step-tools .note-ref { min-height: 36px; padding: 4px 14px; font-size: 14px; margin-left: 0; align-self: center; }
 .r-notes h3 { margin-bottom: 10px; }
+
+/* Ingrediensrad: not- och byt-knappar i en egen kolumn så raden inte bryts */
+.ing-btns { display: inline-flex; gap: 6px; align-items: center; align-self: center; white-space: nowrap; }
+.ing-btns .note-ref { margin-left: 0; }
+.ing-btns .swap-btn { position: static; }
+
+/* Laptop/liggande: kompakt receptshuvud så att steg och ingredienser får höjden */
+.stage.split .r-head { margin-bottom: 10px; }
+.stage.split .r-head .r-origin { min-height: 0; margin: 0; font-size: 13px; padding-right: 96px; }
+.stage.split .r-head h1 { margin: 0; padding-right: 96px; line-height: 1.15; }
+.stage.split .r-meta { margin-top: 4px; }
+.stage.split .overview { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 16px; margin: 6px 0 0; max-width: none; font-size: 15px; }
+.stage.split .overview .ov-time { margin: 0; color: var(--muted); }
+.stage.split .overview ol { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.stage.split .overview li { gap: 5px; }
+.stage.split > .recipe .r-head > .ov-time { margin: 6px 0 0; font-size: 15px; }
+.stage.split .ahead { display: flex; gap: 8px; align-items: baseline; margin: 6px 0 0; padding: 4px 10px; max-width: none; font-size: 14.5px; }
+.stage.split .ahead strong { white-space: nowrap; }
+.stage.split .r-head h1 { display: inline; padding-right: 0; vertical-align: middle; }
+.stage.split .r-head .r-meta { display: inline-flex; margin: 0 0 0 14px; vertical-align: middle; }
+.stage.split .r-head .r-origin { margin-bottom: 2px; }
