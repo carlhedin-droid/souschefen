@@ -863,3 +863,20 @@ a.howto { text-decoration: none; color: var(--ink); }
 .inv-group { margin: 12px 0 4px; }
 .inv-group .pantry-g { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .inv-group .pantry-g h3 { margin: 0 0 6px; }
+
+/* Kockens noter */
+.note-ref { flex: none; border: 1px solid var(--pandan); background: transparent; color: var(--pandan); border-radius: 999px; font-size: 12px; font-weight: 600; padding: 2px 8px; cursor: pointer; margin-left: 4px; }
+.note-ref[aria-expanded="true"] { background: var(--pandan); color: var(--pandan-ink); }
+.note-pop { margin: 4px 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--pandan-soft); font-size: 14.5px; line-height: 1.45; }
+.note-pop strong { display: inline; margin-left: 6px; }
+.note-pop > div { margin-top: 4px; }
+.note-kind { font-size: 11px; vertical-align: middle; }
+.r-notes { margin: 18px 0; }
+.r-notes ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.r-notes li { display: flex; gap: 10px; align-items: flex-start; }
+.r-notes li strong { margin-left: 6px; }
+.r-notes li > div > div { margin-top: 3px; line-height: 1.45; }
+.note-n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--pandan); color: var(--pandan-ink); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.step > .note-pop { grid-column: 2; margin: 0; }
+.step-tools .note-ref { min-height: 36px; padding: 4px 14px; font-size: 14px; margin-left: 0; align-self: center; }
+.r-notes h3 { margin-bottom: 10px; }

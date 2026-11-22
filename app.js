@@ -323,9 +323,12 @@ const RESPONSE_SCHEMA = {
 // Enkla frågor om receptet som visas: bara text (ändringar går via knappen "Uppdatera receptet")
 const LIGHT_SCHEMA = { type: 'OBJECT', properties: { reply: S_STR, offerUpdate: { type: 'BOOLEAN' }, learn: S_ARR }, required: ['reply'], propertyOrdering: ['reply', 'offerUpdate', 'learn'] };
 // Receptets extradelar, hämtas i bakgrunden när receptet redan visas
+const NOTE_KINDS = ['val', 'teknik', 'byte', 'inkop', 'forvag', 'lattare', 'genvag'];
 const EXTRAS_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    notes: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: { type: 'STRING', enum: NOTE_KINDS }, text: S_STR, ings: S_ARR, steps: { type: 'ARRAY', items: { type: 'INTEGER' } } },
+      required: ['title', 'kind', 'text'], propertyOrdering: ['title', 'kind', 'text', 'ings', 'steps'] } },
     swaps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S_STR, options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, amount: S_STRN, why: S_STR }, required: ['name', 'why'] } } }, required: ['id', 'options'] } },
     troubleshoot: { type: 'ARRAY', items: { type: 'OBJECT', properties: { problem: S_STR, fix: S_STR }, required: ['problem', 'fix'] } },
     serveWith: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, why: S_STRN }, required: ['name'] } },
@@ -336,7 +339,7 @@ const EXTRAS_SCHEMA = {
       nonAlcoholic: { type: 'OBJECT', nullable: true, properties: { title: S_STR, kind: S_STRN, why: S_STRN }, required: ['title'] } }, required: ['why'] },
     spoken: S_STRN,
   },
-  propertyOrdering: ['swaps', 'troubleshoot', 'serveWith', 'storage', 'drinks', 'spoken'],
+  propertyOrdering: ['notes', 'swaps', 'troubleshoot', 'serveWith', 'storage', 'drinks', 'spoken'],
 };
 
 const FORMAT_RULES = `## APPENS SVARSFORMAT (måste följas)
@@ -376,13 +379,18 @@ Regler:
 // Extradelarna hämtas i ett eget anrop när receptet redan visas
 const EXTRAS_RULES = `## UPPGIFT
 Receptet nedan visas redan i appen. Fyll i receptets extradelar. Ändra INTE receptet. Svara ENDAST med ett JSON-objekt:
-{ "swaps": [ { "id": "i1", "options": [ { "name": "kycklingbröst", "amount": "300 g" | null, "why": "magrare, kortare stektid" } ] } ],
+{ "notes": [ { "title": "Lårfilé eller bröst?", "kind": "val", "text": "…", "ings": ["i1"], "steps": [2] } ],
+  "swaps": [ { "id": "i1", "options": [ { "name": "kycklingbröst", "amount": "300 g" | null, "why": "magrare, kortare stektid" } ] } ],
   "troubleshoot": [ { "problem": "Såsen är för tunn", "fix": "Sjud utan lock 5–10 min." } ],
   "serveWith": [ { "name": "Gurkraita", "why": "svalkar hettan" } ],
   "storage": { "fridge": "3 dagar", "freezer": "3 månader, utan grädden" | null, "leftovers": "Fyll wraps med resterna" | null } | null,
   "drinks": { "why": "…", "food": "pasta" | null, "options": [ { "title": "Syrligt, bärigt rött", "kind": "rott", "taste": "mjukt-barigt", "grape": "Barbera" | null, "country": "Italien" | null, "region": "Piemonte" | null, "lookFor": "Fruktsyra 8–10, strävhet under 6", "why": "Syran möter tomaten" } ], "priceTip": "…" | null, "nonAlcoholic": { "title": "Alkoholfritt mousserande", "kind": "alkoholfritt-mousserande", "why": "Friskt mot det feta" } | null } | null,
   "spoken": "…" }
 Regler (kort, konkret, inget fyllnadsprat):
+  - "notes": 3–7 KOCKENS NOTER, i stil med en erfaren receptskribent som har gjort researchen åt oss så att vi slipper leta på nätet. Varje not hör till ett moment där man gör ett val eller där tekniken avgör resultatet – inte allmänt prat.
+    - "kind": "val" (2–3 sätt att göra; vad som skiljer i smak, tid och disk; säg vilket du rekommenderar för oss och varför), "teknik" (varför steget görs så, vad som händer om man hoppar över det, klartecken), "byte" (vad ingrediensen gör i rätten, bästa ersättning och vad man förlorar), "inkop" (var den finns i Sverige – vilken hylla på ICA/Coop eller asiatisk butik, vad den heter på förpackningen, vad man ska titta efter), "forvag" (vad som kan göras i förväg och hur länge det håller), "lattare" (lättare variant och vad det kostar i smak), "genvag" (färdigköpt eller snabbare väg och vad det kostar i smak).
+    - "text": 2–4 meningar. Konkreta siffror (tid, temperatur, mängd). Fokus på smak per insats. Ge en tydlig rekommendation, inte bara alternativ. Påstå aldrig att du själv har provlagat; luta dig mot etablerad kockkunskap och säg när det är smaksak.
+    - "ings": id på ingredienserna noten gäller. "steps": stegnummer noten gäller (1 = första steget). Minst ett av dem. Upprepa inte receptets "tips".
   - "swaps": lista med {"id": ingrediensens id, "options": [...]}, bara för 2–5 ingredienser där ett byte är vanligt (svår att hitta, dyr, allergi, smak). 1–3 alternativ var med mängd och varför. Krockar aldrig med ALLERGIER OCH ÄTER INTE. Övriga ingredienser utelämnas.
   - "troubleshoot": 2–3 vanliga problem för just den här rätten med konkret åtgärd.
   - "serveWith": 2–3 tillbehör som passar, med kort varför.
@@ -1001,7 +1009,7 @@ const CLAIM_RE = /(i(?:'ve| have) (?:updated|changed|adjusted|replaced|added|rem
 const CHANGE_RE = /(byt|ändra|gör om|göra om|lägg till|lägga till|ta bort|ersätt|uppdatera|skala|dubbla|halvera|portion|istället|i stället|annat recept|ny rätt|förslag|recept på|receptet på|vegetarisk version|swap|change|replace|update|add |remove|instead|servings|recipe for|suggest)|^\s*(ja|japp|kör|gör det|yes|ok|okej)\b/i;
 // Vid en ändring: flytta över extradelarna från förra versionen så att de syns tills nya hämtats
 function carryExtras(from, to) {
-  ['troubleshoot', 'serveWith', 'storage', 'drinks'].forEach(k => { if (to[k] == null || (Array.isArray(to[k]) && !to[k].length)) to[k] = from[k]; });
+  ['notes', 'troubleshoot', 'serveWith', 'storage', 'drinks'].forEach(k => { if (to[k] == null || (Array.isArray(to[k]) && !to[k].length)) to[k] = from[k]; });
   const byKey = new Map(from.ingredients.map(i => [(i.name || '').toLowerCase(), i]));
   to.ingredients.forEach(i => { if (!i.swaps?.length) { const o = byKey.get((i.name || '').toLowerCase()); if (o?.swaps?.length) i.swaps = o.swaps; } });
 }
@@ -1011,7 +1019,7 @@ async function fetchExtras(r, opts = {}) {
   const refresh = () => { if (S.route.view === 'recipe' && S.current.recipe === r) keepScroll(renderStage); };
   refresh();
   const core = stripRecipe(r);
-  ['troubleshoot', 'serveWith', 'storage', 'drinks', 'spoken'].forEach(k => delete core[k]);
+  ['notes', 'troubleshoot', 'serveWith', 'storage', 'drinks', 'spoken'].forEach(k => delete core[k]);
   core.ingredients = core.ingredients.map(({ swaps, ...i }) => i);
   const d = dayInfo();
   const system = `${EXTRAS_RULES}
@@ -1022,7 +1030,7 @@ ${prefsText(d)}
 ${S.data.profile}
 
 ## IDAG
-${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everything the user sees in natural English (keep kind, taste, food, grape, country and region values exactly as specified).')}`;
+${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everything the user sees in natural English (keep kind, taste, food, grape, country and region values and note "kind" exactly as specified).')}`;
   const prompt = `${opts.forceDrinks ? 'Vi vill ha dryckestips till den här rätten: fyll "drinks" även om Dryckestips säger nej.\n\n' : ''}Recept (${portionsFor(r)} portioner):\n${JSON.stringify(core)}`;
   try {
     const o = S.settings.provider === 'claude' ? await claudeJSON(system, prompt) : await geminiJSON(prompt, { system, schema: EXTRAS_SCHEMA, temperature: 0.6, kind: 'extradelar' });
@@ -1030,6 +1038,7 @@ ${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everythi
     const sw = new Map((Array.isArray(o.swaps) ? o.swaps : []).map(x => [String(x.id), x.options]));
     const merged = { ...r,
       ingredients: r.ingredients.map(i => ({ ...i, swaps: sw.has(i.id) ? sw.get(i.id) : i.swaps })),
+      notes: o.notes?.length ? o.notes : r.notes,
       troubleshoot: o.troubleshoot?.length ? o.troubleshoot : r.troubleshoot,
       serveWith: o.serveWith?.length ? o.serveWith : r.serveWith,
       storage: o.storage || r.storage,
@@ -1074,6 +1083,8 @@ function normalizeRecipe(r) {
   r.spoken = typeof r.spoken === 'string' && r.spoken.trim() ? { text: r.spoken.trim(), sig: spokenSig(r) }  // ny från souschefen
     : r.spoken && typeof r.spoken.text === 'string' && r.spoken.text.trim() ? { text: r.spoken.text, sig: String(r.spoken.sig || '') } : null;
   r.activeTime = str(r.activeTime); r.ahead = str(r.ahead);
+  r.notes = arr(r.notes).filter(n => n && str(n.title) && str(n.text)).slice(0, 8).map(n => ({ title: str(n.title), text: str(n.text), kind: NOTE_KINDS.includes(n.kind) ? n.kind : 'teknik',
+    ings: arr(n.ings).map(String), steps: arr(n.steps).map(Number).filter(x => x > 0) }));
   r.troubleshoot = arr(r.troubleshoot).filter(t => t && str(t.problem) && str(t.fix)).slice(0, 4).map(t => ({ problem: str(t.problem), fix: str(t.fix) }));
   r.serveWith = arr(r.serveWith).filter(t => t && str(t.name)).slice(0, 4).map(t => ({ name: str(t.name), why: str(t.why) }));
   const st = r.storage && typeof r.storage === 'object' ? { fridge: str(r.storage.fridge), freezer: str(r.storage.freezer), leftovers: str(r.storage.leftovers) } : null;
@@ -1503,8 +1514,8 @@ function viewRecipe() {
         <input type="checkbox" ${S.checked[i.id] ? 'checked' : ''} data-check="${esc(i.id)}">
         <span class="amt">${esc(scaleAmount(i.amount, f))}</span>
         <span><span class="name">${esc(i.name)}</span>${i.note ? ` <span class="note">${esc(i.note)}</span>` : ''}</span>
-        ${i.swaps?.length ? `<button type="button" class="swap-btn" data-swapopen="${esc(i.id)}" aria-expanded="${S.openSwap === i.id}">${L('Byt', 'Swap')}</button>` : ''}
-      </label>${i.swaps?.length && S.openSwap === i.id ? swapPanel(i, f) : ''}`).join('')}</div>`).join('')}
+        ${noteRefs(r, { ing: i.id })}${i.swaps?.length ? `<button type="button" class="swap-btn" data-swapopen="${esc(i.id)}" aria-expanded="${S.openSwap === i.id}">${L('Byt', 'Swap')}</button>` : ''}
+      </label>${noteInline(r, { ing: i.id })}${i.swaps?.length && S.openSwap === i.id ? swapPanel(i, f) : ''}`).join('')}</div>`).join('')}
     <div class="ing-actions"><button class="btn start-cook" data-startcook>${L('Allt är framme – börja laga', 'Everything is out – start cooking')}</button>
       <button class="ghost shop-open" data-shopopen>🛒 ${L('Till inköpslistan', 'To shopping list')}</button></div>
   </section>
@@ -1518,7 +1529,9 @@ function viewRecipe() {
       <li class="step ${S.activeStep === k ? 'active' : ''} ${S.doneSteps[k] ? 'done' : ''}" data-step="${k}" data-n="${k + 1}" ${s.optional && S.hideOptional ? 'hidden' : ''}>
         ${s.title ? `<h3 class="step-title">${esc(s.title)}${s.optional ? ` <span class="tag optional">${L('Kan hoppas över', 'Optional')}</span>` : ''}</h3>` : ''}
         <div class="step-text">${s.optional && !s.title ? `<span class="tag optional">${L('Kan hoppas över', 'Optional')}</span>` : ''}${highlightAmounts(scaleStepText(s.text, f))}</div>
+        ${noteInline(r, { step: k + 1 })}
         <div class="step-tools">
+          ${noteRefs(r, { step: k + 1 })}
           ${s.howTo ? `<a class="ghost howto" href="https://www.youtube.com/results?search_query=${encodeURIComponent(s.howTo)}" target="_blank" rel="noopener">▶ ${L('Visa hur', 'Show me')}</a>` : ''}
           ${s.minutes ? `<button class="ghost" data-timer="${k}">⏱ ${fmtMin(s.minutes)}</button>` : ''}
           <button class="ghost" data-done="${k}">${S.doneSteps[k] ? L('Ångra', 'Undo') : L('Klar', 'Done')}</button>
@@ -1533,6 +1546,7 @@ function viewRecipe() {
         ${r.health.tips?.length ? `<ul>${r.health.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}</div>` : ''}
       ${r.tips?.length ? `<div class="tips"><h3>${L(`Souschefens tips`, `Sous-chef's tips`)}</h3><ul>${r.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
     </div>` : ''}
+    ${notesSection(r)}
     ${recipeAfter(r)}
     ${saved ? `<div class="notes-wrap">${notesBox(saved)}</div>` : ''}
   </section>
@@ -1546,6 +1560,24 @@ function recipeTop(r) {
   return `${r.ahead ? `<div class="ahead"><strong>${L('Börja i förväg', 'Start ahead')}</strong><span>${esc(r.ahead)}</span></div>` : ''}
     ${r.overview?.length ? `<div class="overview">${times ? `<p class="ov-time">${esc(times)}</p>` : ''}<ol>${r.overview.map(o => `<li>${esc(o)}</li>`).join('')}</ol></div>` : times ? `<p class="ov-time">${esc(times)}</p>` : ''}`;
 }
+// Kockens noter: markörer vid ingredienser och steg, noten fälls ut på plats (ingen scrollning)
+const NOTE_LABEL = { val: ['Val', 'Choice'], teknik: ['Teknik', 'Technique'], byte: ['Byte', 'Swap'], inkop: ['Inköp', 'Shopping'], forvag: ['I förväg', 'Make ahead'], lattare: ['Lättare', 'Lighter'], genvag: ['Genväg', 'Shortcut'] };
+const noteLabel = k => L(...(NOTE_LABEL[k] || NOTE_LABEL.teknik));
+function noteRefs(r, where) {
+  const ks = (r.notes || []).map((n, k) => [n, k]).filter(([n]) => where.ing ? n.ings.includes(where.ing) : n.steps.includes(where.step)).map(([, k]) => k);
+  return ks.map(k => `<button type="button" class="note-ref" data-noteref="${k}" data-where="${where.ing ? 'i:' + esc(where.ing) : 's:' + where.step}" aria-expanded="${S.openNote === k + '|' + (where.ing ? 'i:' + where.ing : 's:' + where.step)}" title="${esc(r.notes[k].title)}">${L('Not', 'Note')} ${k + 1}</button>`).join('');
+}
+function noteInline(r, where) {
+  const key = where.ing ? 'i:' + where.ing : 's:' + where.step;
+  const m = /^(\d+)\|(.*)$/.exec(S.openNote || '');
+  if (!m || m[2] !== key) return '';
+  const n = r.notes?.[+m[1]]; if (!n) return '';
+  return `<div class="note-pop"><span class="tag note-kind">${esc(noteLabel(n.kind))}</span><strong>${esc(n.title)}</strong><div>${md(n.text)}</div></div>`;
+}
+function notesSection(r) {
+  if (!r.notes?.length) return S.extrasFor === r ? '' : `<div class="enrich"><button class="ghost" data-extras>${L('Lägg till kockens noter', 'Add chef\'s notes')}</button></div>`;
+  return `<div class="r-notes" id="r-notes"><h3>${L('Kockens noter', 'Chef\'s notes')}</h3><ol>${r.notes.map((n, k) => `<li id="note-${k}"><span class="note-n">${k + 1}</span><div><span class="tag note-kind">${esc(noteLabel(n.kind))}</span><strong>${esc(n.title)}</strong><div>${md(n.text)}</div></div></li>`).join('')}</ol></div>`;
+}
 function swapPanel(i, f) {
   return `<div class="swaps" role="group" aria-label="${L(`Byt ut ${esc(i.name)}`, `Swap ${esc(i.name)}`)}">${i.swaps.map((w, k) => `
     <button type="button" class="swap" data-swap="${esc(i.id)}" data-k="${k}"><strong>${w.amount ? esc(scaleAmount(w.amount, f)) + ' ' : ''}${esc(w.name)}</strong>${w.why ? `<span>${esc(w.why)}</span>` : ''}</button>`).join('')}</div>`;
@@ -1553,7 +1585,7 @@ function swapPanel(i, f) {
 // Efter stegen: om det går fel, servera med, förvaring – eller en knapp som kompletterar äldre recept
 function recipeAfter(r) {
   const busy = S.extrasFor === r;
-  const status = busy ? `<div class="extras-loading" aria-live="polite">${potSvg()}<span>${L('Souschefen fyller på byten, tillbehör, dryck och tips…', 'The sous-chef is adding swaps, sides, drinks and tips…')}</span></div>`
+  const status = busy ? `<div class="extras-loading" aria-live="polite">${potSvg()}<span>${L('Souschefen skriver kockens noter, byten, tillbehör och dryck…', 'The sous-chef is writing chef\'s notes, swaps, sides and drinks…')}</span></div>`
     : S.extrasErr && S.current.recipe === r ? `<div class="enrich"><p class="hint">${L('Tipsen gick inte att hämta just nu.', 'The tips could not be fetched right now.')}</p><button class="ghost" data-extras>${L('Försök igen', 'Try again')}</button></div>` : '';
   return status + recipeAfterInner(r, busy);
 }
@@ -2485,7 +2517,10 @@ $('#stage').addEventListener('click', async e => {
   if (pick) { const s = S.current.suggestions[+pick.dataset.pick]; send(L(`Ge mig det kompletta receptet på ${s.name}.`, `Give me the complete recipe for ${s.name}.`), null, { flow: true }); return; }
   if (t.closest('[data-more]')) { send(L('Ge mig fler förslag, gärna åt ett annat håll.', 'Give me more suggestions, ideally in a different direction.'), null, { flow: true, fast: true }); return; }
 
-  // Recept: byten, valfria steg, tillbehör, komplettering
+  // Recept: kockens noter, byten, valfria steg, tillbehör, komplettering
+  const nr = t.closest('[data-noteref]');
+  if (nr) { e.preventDefault(); e.stopPropagation(); const key = nr.dataset.noteref + '|' + nr.dataset.where; S.openNote = S.openNote === key ? null : key; keepScroll(renderStage); return; }
+  if (t.closest('.note-pop')) return;
   const so = t.closest('[data-swapopen]');
   if (so) { e.preventDefault(); S.openSwap = S.openSwap === so.dataset.swapopen ? null : so.dataset.swapopen; keepScroll(renderStage); return; }
   const sw = t.closest('[data-swap]');
