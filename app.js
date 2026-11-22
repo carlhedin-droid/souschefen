@@ -333,9 +333,9 @@ const EXTRAS_SCHEMA = {
     troubleshoot: { type: 'ARRAY', items: { type: 'OBJECT', properties: { problem: S_STR, fix: S_STR }, required: ['problem', 'fix'] } },
     serveWith: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, why: S_STRN }, required: ['name'] } },
     storage: { type: 'OBJECT', nullable: true, properties: { fridge: S_STRN, freezer: S_STRN, leftovers: S_STRN } },
-    drinks: { type: 'OBJECT', nullable: true, properties: { why: S_STR, priceTip: S_STRN,
+    drinks: { type: 'OBJECT', nullable: true, properties: { why: S_STR, approach: S_STRN, avoid: S_STRN, priceTip: S_STRN,
       food: S_STRN,
-      options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: S_STR, taste: S_STRN, grape: S_STRN, country: S_STRN, region: S_STRN, lookFor: S_STRN, why: S_STRN }, required: ['title', 'kind'] } },
+      options: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, kind: S_STR, taste: S_STRN, grape: S_STRN, country: S_STRN, region: S_STRN, lookFor: S_STRN, why: S_STRN, serve: S_STRN, pick: { type: 'BOOLEAN' } }, required: ['title', 'kind'] } },
       nonAlcoholic: { type: 'OBJECT', nullable: true, properties: { title: S_STR, kind: S_STRN, why: S_STRN }, required: ['title'] } }, required: ['why'] },
     spoken: S_STRN,
   },
@@ -395,8 +395,11 @@ Regler (kort, konkret, inget fyllnadsprat):
   - "troubleshoot": 2–3 vanliga problem för just den här rätten med konkret åtgärd.
   - "serveWith": 2–3 tillbehör som passar, med kort varför.
   - "drinks": se Dryckestips i INSTÄLLNINGAR. Inga specifika flaskor eller producenter – bara typ och stil, så att vi väljer själva på hyllan.
-    - "why": vad i rätten som styr valet (fett, syra, hetta, sötma, umami, sälta) och vad man ska undvika. 1–2 meningar.
-    - "options": 2–3 alternativ, gärna i olika riktningar (t.ex. ett rött, ett vitt och en öl). Fält som styr länken till Systembolaget:
+    - Resonera som en erfaren sommelier som förklarar sitt val för oss – konkret och utan floskler.
+    - "why": 2–4 meningar om vad i rätten som styr valet: fett, syra, hetta, sötma, umami, sälta, textur och tillagning (grillat, bräserat, krämigt). Nämn den dominerande smaken – ofta såsen eller kryddningen, inte proteinet.
+    - "approach": 1–2 meningar om strategin: matcha (liknande tyngd och smak) eller kontrastera (t.ex. syra mot fett, sötma mot hetta) – och varför just det fungerar här.
+    - "avoid": 1–2 meningar om vad som INTE passar och varför (t.ex. "Strävt, ekat rött mot chili blir bittert och hettan förstärks").
+    - "options": 2–3 alternativ, gärna i olika riktningar (t.ex. ett rött, ett vitt och en öl). Per alternativ: "why" 2–3 meningar om vad i drycken som möter vad i rätten och vad man vinner eller förlorar jämfört med de andra alternativen; "serve": serveringstemperatur i °C och om det ska luftas eller karafferas (t.ex. "16 °C, gärna 30 min i karaff"); "pick": true på det alternativ du själv skulle välja (exakt ett). Fält som styr länken till Systembolaget:
       - "kind": rott, vitt, rose, mousserande, ol eller cider.
       - "taste": Systembolagets smakstil. Rött: mjukt-barigt, fruktigt-smakrikt, kryddigt-mustigt, stramt-nyanserat. Vitt: friskt-fruktigt, fylligt-smakrikt. Rosé: fruktigt-smakrikt. Mousserande: torrt-vitt. Annars null.
       - "grape": EN druva som den heter på Systembolaget (t.ex. "Riesling", "Pinot noir", "Sangiovese"), eller null om flera passar lika bra.
@@ -1090,9 +1093,9 @@ function normalizeRecipe(r) {
   const st = r.storage && typeof r.storage === 'object' ? { fridge: str(r.storage.fridge), freezer: str(r.storage.freezer), leftovers: str(r.storage.leftovers) } : null;
   r.storage = st && (st.fridge || st.freezer || st.leftovers) ? st : null;
   const dr = r.drinks && typeof r.drinks === 'object' ? r.drinks : null;
-  const opt = o => o && str(o.title) ? { title: str(o.title), kind: str(o.kind), taste: str(o.taste), grape: str(o.grape), country: str(o.country), region: str(o.region), lookFor: str(o.lookFor), why: str(o.why) } : null;
+  const opt = o => o && str(o.title) ? { title: str(o.title), kind: str(o.kind), taste: str(o.taste), grape: str(o.grape), country: str(o.country), region: str(o.region), lookFor: str(o.lookFor), why: str(o.why), serve: str(o.serve), pick: o.pick === true } : null;
   if (!dr) r.drinks = null;
-  else if (str(dr.why)) r.drinks = { why: str(dr.why), priceTip: str(dr.priceTip), food: str(dr.food), options: arr(dr.options).map(opt).filter(Boolean).slice(0, 3),
+  else if (str(dr.why)) r.drinks = { why: str(dr.why), approach: str(dr.approach), avoid: str(dr.avoid), priceTip: str(dr.priceTip), food: str(dr.food), options: arr(dr.options).map(opt).filter(Boolean).slice(0, 3),
     nonAlcoholic: dr.nonAlcoholic && typeof dr.nonAlcoholic === 'object' ? opt({ ...dr.nonAlcoholic, kind: dr.nonAlcoholic.kind || 'annat' }) : (str(dr.nonAlcoholic) ? { title: str(dr.nonAlcoholic), kind: 'annat' } : null) };
   else if (str(dr.style)) r.drinks = { why: str(dr.style), priceTip: null,  // äldre format: stil + sökord, flaskor slängs
     options: str(dr.lookFor) || str(dr.searchTerm) ? [{ title: str(dr.searchTerm) || L('Passande stil', 'Matching style'), kind: null, taste: null, grape: null, country: null, lookFor: str(dr.lookFor), why: null, text: str(dr.searchTerm) }] : [],
@@ -1660,14 +1663,17 @@ function drinksBlock(r) {
   if (!dr && S.extrasFor === r) return '';
   if (!dr) return `<div class="enrich"><button class="ghost" data-drinks>🍷 ${L('Föreslå dryck till maten', 'Suggest a drink')}</button></div>`;
   const card = o => { const ln = sbLinks(o, dr); return `<div class="drink">
-      <strong>${esc(o.title)}</strong>
+      <strong>${esc(o.title)}${o.pick ? ` <span class="tag pick">${L('Sommelierens val', 'Sommelier\'s pick')}</span>` : ''}</strong>
       ${o.why ? `<span class="b-why">${esc(o.why)}</span>` : ''}
+      ${o.serve ? `<span class="b-look"><b>${L('Servera', 'Serve')}:</b> ${esc(o.serve)}</span>` : ''}
       ${o.lookFor ? `<span class="b-look"><b>${L('Leta efter', 'Look for')}:</b> ${esc(o.lookFor)}</span>` : ''}
       ${o.kind !== 'annat' ? `<span class="b-links"><a href="${ln.main.url}" target="_blank" rel="noopener">${ln.main.label}</a></span>
       ${ln.extra.length ? `<span class="sb-chips">${ln.extra.map(x => `<a class="sb-chip" href="${x.url}" target="_blank" rel="noopener">${x.label}</a>`).join('')}</span>` : ''}` : ''}
     </div>`; };
   return `<div class="r-extra drinks"><h3>${L('Dryck till maten', 'Drinks')}</h3>
     <p class="dr-style">${esc(dr.why)}</p>
+    ${dr.approach ? `<p class="dr-style"><strong>${L('Strategi', 'Approach')}:</strong> ${esc(dr.approach)}</p>` : ''}
+    ${dr.avoid ? `<p class="dr-style dr-avoid"><strong>${L('Undvik', 'Avoid')}:</strong> ${esc(dr.avoid)}</p>` : ''}
     ${dr.options.length ? `<div class="drink-list">${dr.options.map(card).join('')}</div>` : ''}
     ${dr.priceTip ? `<p class="dr-price"><strong>${L('I din prisklass', 'In your price range')}:</strong> ${esc(dr.priceTip)}</p>` : ''}
     ${dr.nonAlcoholic ? `<h4 class="dr-sub">${L('Alkoholfritt', 'Alcohol-free')}</h4><div class="drink-list">${card(dr.nonAlcoholic)}</div>` : ''}

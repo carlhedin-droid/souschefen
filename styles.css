@@ -900,3 +900,6 @@ a.howto { text-decoration: none; color: var(--ink); }
 .stage.split .r-head h1 { display: inline; padding-right: 0; vertical-align: middle; }
 .stage.split .r-head .r-meta { display: inline-flex; margin: 0 0 0 14px; vertical-align: middle; }
 .stage.split .r-head .r-origin { margin-bottom: 2px; }
+
+.tag.pick { background: var(--pandan); color: var(--pandan-ink); font-size: 11px; vertical-align: middle; margin-left: 4px; }
+.dr-avoid strong { color: var(--chili, #b4442f); }
