@@ -1470,11 +1470,11 @@ function viewRecipe() {
       ${r.source ? `<a class="r-source" href="${esc(r.source)}" target="_blank" rel="noopener">${L('Källa', 'Source')}: ${esc((() => { try { return new URL(r.source).hostname.replace(/^www\./, ''); } catch { return L('länk', 'link'); } })())}</a>` : ''}
       ${r.tag ? `<span class="tag ${isHelg ? 'helg' : 'vardag'}">${isHelg ? L('Helg', 'Weekend') : L('Vardag', 'Weekday')}</span>` : ''}
       ${r.time ? `<span>${esc(r.time)}</span>` : ''}
+      ${'speechSynthesis' in window || 'Audio' in window ? `<span class="listen${S.speech && S.speech.title ? ' active' : ''}" id="listenCard">${listenCardHtml()}</span>` : ''}
       ${saved?.rating ? `<span class="r-stars" aria-label="${L(`${saved.rating} av 5`, `${saved.rating} of 5`)}">${'★'.repeat(saved.rating)}</span>` : ''}
       ${saved && !S.current.dirty ? `<span class="r-saved">${L('I kokboken', 'In cookbook')}</span>` : ''}
     </div>
     ${saved && S.current.dirty ? `<p class="r-dirty">${L('Receptet är ändrat sedan du sparade.', 'The recipe has changed since you saved it.')} <button class="linkish" data-save>${L('Spara ändringarna', 'Save changes')}</button></p>` : ''}
-    ${'speechSynthesis' in window || 'Audio' in window ? `<div class="listen${S.speech && S.speech.title ? ' active' : ''}" id="listenCard">${listenCardHtml()}</div>` : ''}
     ${r.intro ? `<p class="r-intro">${esc(r.intro)}</p>` : ''}
     ${recipeTop(r)}
   </header>
@@ -1861,14 +1861,13 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v1
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>';
 function listenCardHtml() {
   const sp = S.speech && S.speech.title ? S.speech : null;
-  if (!sp) return `<button type="button" class="listen-idle" data-listen><span class="listen-btn">${ICON_PLAY}</span>
-    <span class="listen-txt"><strong>${L('Lyssna på receptet', 'Listen to the recipe')}</strong><span>${L('Kort sammanfattning, ungefär en minut', 'Short summary, about a minute')}</span></span></button>`;
+  if (!sp) return `<button type="button" class="listen-btn listen-idle" data-listen aria-label="${L('Lyssna på receptet (ungefär en minut)', 'Listen to the recipe (about a minute)')}" title="${L('Lyssna på receptet', 'Listen to the recipe')}">${ICON_PLAY}</button>`;
   const pct = sp.mode === 'ai' && sp.dur ? Math.min(100, (sp.pos || 0) / sp.dur * 100) : sp.total ? (sp.idx / sp.total) * 100 : 0;
   const status = sp.state === 'loading' ? (sp.step === 'voice' ? L('Förbereder rösten…', 'Preparing the voice…') : L('Souschefen skriver sammanfattningen…', 'The sous-chef is writing the summary…'))
     : sp.state === 'paused' ? L('Pausad', 'Paused') : L('Läser upp', 'Reading aloud');
   const time = sp.mode === 'ai' && sp.dur ? `${mmss(sp.pos || 0)} / ${mmss(sp.dur)}` : '';
   return `<button type="button" class="listen-btn" ${sp.state === 'loading' ? 'disabled aria-busy="true"' : 'data-speechpause'} aria-label="${sp.state === 'playing' ? L('Pausa', 'Pause') : L('Spela', 'Play')}">${sp.state === 'loading' ? '<span class="listen-spin" aria-hidden="true"></span>' : sp.state === 'playing' ? ICON_PAUSE : ICON_PLAY}</button>
-    <span class="listen-txt" aria-live="polite"><strong>${status}</strong><span class="listen-prog" aria-hidden="true"><i style="width:${pct.toFixed(1)}%"></i></span>${time ? `<span class="listen-time">${time}</span>` : ''}</span>
+    <span class="listen-txt" aria-live="polite"><span class="sr-only">${status}</span><span class="listen-prog" aria-hidden="true"><i style="width:${pct.toFixed(1)}%"></i></span>${time ? `<span class="listen-time">${time}</span>` : ''}</span>
     <button type="button" class="icon-btn listen-stop" data-speechstop aria-label="${L('Stoppa uppläsningen', 'Stop reading')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>`;
 }
 function updateSpeechBar() {
