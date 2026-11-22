@@ -1576,7 +1576,11 @@ function noteInline(r, where) {
 }
 function notesSection(r) {
   if (!r.notes?.length) return S.extrasFor === r ? '' : `<div class="enrich"><button class="ghost" data-extras>${L('Lägg till kockens noter', 'Add chef\'s notes')}</button></div>`;
-  return `<div class="r-notes" id="r-notes"><h3>${L('Kockens noter', 'Chef\'s notes')}</h3><ol>${r.notes.map((n, k) => `<li id="note-${k}"><span class="note-n">${k + 1}</span><div><span class="tag note-kind">${esc(noteLabel(n.kind))}</span><strong>${esc(n.title)}</strong><div>${md(n.text)}</div></div></li>`).join('')}</ol></div>`;
+  // Noter som visas vid en ingrediens eller ett steg upprepas inte här – bara de som saknar plats i receptet
+  const ingIds = new Set(r.ingredients.map(i => i.id)), nSteps = r.steps.length;
+  const loose = r.notes.map((n, k) => [n, k]).filter(([n]) => !n.ings.some(id => ingIds.has(id)) && !n.steps.some(x => x <= nSteps));
+  if (!loose.length) return '';
+  return `<div class="r-notes" id="r-notes"><h3>${L('Fler noter från kocken', 'More notes from the chef')}</h3><ol>${loose.map(([n, k]) => `<li id="note-${k}"><span class="note-n">${k + 1}</span><div><span class="tag note-kind">${esc(noteLabel(n.kind))}</span><strong>${esc(n.title)}</strong><div>${md(n.text)}</div></div></li>`).join('')}</ol></div>`;
 }
 function swapPanel(i, f) {
   return `<div class="swaps" role="group" aria-label="${L(`Byt ut ${esc(i.name)}`, `Swap ${esc(i.name)}`)}">${i.swaps.map((w, k) => `
