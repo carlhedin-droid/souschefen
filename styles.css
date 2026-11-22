@@ -943,13 +943,15 @@ a.howto { text-decoration: none; color: var(--ink); }
   .r-jump button[data-rtab="drink"], .r-jump button[data-rtab="more"] { padding: 0 11px; }
 }
 
-/* Klara steg fälls ihop till en rad */
-.step.done { padding-top: 8px; padding-bottom: 8px; opacity: .55; }
-.step.done .step-text, .step.done .step-tools, .step.done .note-pop { display: none; }
-.step.done::before { font-size: 18px; }
-.step.done .step-title { font-size: 15px; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
-.step.done .step-title::after { content: ' ✓'; color: var(--pandan); text-decoration: none; display: inline-block; margin-left: 4px; }
-.step.done:hover { opacity: .85; }
-.step:not(.active) .step-next { display: none; }
-.step-next { font-weight: 700; }
-.step.done:not(:has(.step-title)) .step-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; text-decoration: line-through; }
+/* Steg: ihopfällda som standard, det öppnade steget visas helt; klara steg stryks */
+.step:not(.active) { padding-top: 10px; padding-bottom: 10px; }
+.step:not(.active) .step-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15.5px; color: var(--muted); }
+.step:not(.active) .step-tools, .step:not(.active) .note-pop { display: none; }
+.step:not(.active)::before { font-size: 22px; }
+.step:not(.active) .step-title { font-size: 16.5px; }
+.step.done { opacity: .5; }
+.step.done .step-title, .step.done .step-text { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.step.done .step-title::after { content: ' ✓'; color: var(--pandan); display: inline-block; margin-left: 4px; text-decoration: none; }
+.step.done:hover, .step.active.done { opacity: .85; }
+.step-done { font-weight: 700; }
+.stage.split .step:not(.active) .step-text { font-size: 15px; }
