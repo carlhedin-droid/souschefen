@@ -389,20 +389,48 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
   if (SR) {
     mic.hidden = false;
     mic.setAttribute('aria-label', L('Tala in varor', 'Speak items'));
-    let rec = null;
-    mic.addEventListener('click', () => {
-      if (rec) { rec.stop(); return; }
-      const inp = $('#addInput'), before = inp.value.trim(), ph = inp.placeholder;
-      rec = new SR(); rec.lang = EN ? 'en-GB' : 'sv-SE'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-      let finalText = '';
-      rec.onresult = ev => { let interim = ''; for (let k = ev.resultIndex; k < ev.results.length; k++) { const t = ev.results[k][0].transcript; if (ev.results[k].isFinal) finalText += t + ' '; else interim += t; } inp.value = [before, (finalText + interim).trim()].filter(Boolean).join(', '); };
-      rec.onerror = ev => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast(L('Mikrofonen är blockerad – tillåt den i webbläsarens inställningar.', 'The microphone is blocked – allow it in the browser settings.'), 4000); else if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast(L('Kunde inte höra – försök igen.', 'Could not hear – try again.'), 2500); };
-      rec.onend = () => {
-        rec = null; mic.classList.remove('on'); inp.placeholder = ph;
-        if (finalText.trim()) { S.voice = true; $('#addForm').requestSubmit(); }
+    // Lyssnar tills det varit tyst i 15 s eller man trycker på mikrofonen igen. Webbläsare som avslutar
+    // själva efter en kort paus (Chrome på Android) startas om i bakgrunden utan att texten försvinner.
+    const SILENCE = 15000, MAX = 120000;
+    let L0 = null;   // pågående inspelning
+    const finish = () => { if (!L0 || L0.done) return; L0.done = true; clearInterval(L0.timer); try { L0.rec.stop(); } catch { L0.end(); } };
+    function startRec() {
+      const st = L0, rec = new SR(); st.rec = rec;
+      const live = () => L0 === st && st.rec === rec;
+      rec.lang = EN ? 'en-GB' : 'sv-SE'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+      let sessionFinal = '';
+      rec.onresult = ev => {
+        if (!live()) return;
+        let interim = ''; sessionFinal = '';
+        for (let k = 0; k < ev.results.length; k++) { const t = ev.results[k][0].transcript; if (ev.results[k].isFinal) sessionFinal += t + ' '; else interim += t; }
+        st.heard = Date.now(); st.session = sessionFinal;
+        st.inp.value = [st.before, (st.text + sessionFinal + interim).replace(/\s+/g, ' ').replace(/[,\s]+$/, '').trim()].filter(Boolean).join(', ');
       };
-      mic.classList.add('on'); inp.placeholder = L('Lyssnar… säg t.ex. "mjölk, två avokado och tandkräm"', 'Listening… e.g. "milk, two avocados and toothpaste"');
-      try { rec.start(); } catch { rec = null; mic.classList.remove('on'); inp.placeholder = ph; }
+      rec.onerror = ev => {
+        if (!live()) return;
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { toast(L('Mikrofonen är blockerad – tillåt den i webbläsarens inställningar.', 'The microphone is blocked – allow it in the browser settings.'), 4000); st.done = true; }
+        else if (!['no-speech', 'aborted', 'network'].includes(ev.error)) toast(L('Kunde inte höra – försök igen.', 'Could not hear – try again.'), 2500);
+      };
+      rec.onend = () => {
+        if (!live()) return;
+        if ((st.session || '').trim()) st.text += st.session.trim() + ', '; st.session = '';   // en paus = ny vara
+        if (!st.done && Date.now() - st.heard < SILENCE && Date.now() - st.start < MAX) { try { startRec(); return; } catch { /* faller igenom */ } }
+        st.end();
+      };
+      rec.start();
+    }
+    mic.addEventListener('click', () => {
+      if (L0) { finish(); return; }
+      const inp = $('#addInput'), ph = inp.placeholder;
+      L0 = { inp, before: inp.value.trim(), text: '', session: '', heard: Date.now(), start: Date.now(), done: false };
+      L0.end = () => {
+        const st = L0; if (!st) return; L0 = null; clearInterval(st.timer);
+        mic.classList.remove('on'); inp.placeholder = ph;
+        if ((st.text + st.session).trim()) { S.voice = true; $('#addForm').requestSubmit(); }
+      };
+      L0.timer = setInterval(() => { if (L0 && (Date.now() - L0.heard > SILENCE || Date.now() - L0.start > MAX)) finish(); }, 500);
+      mic.classList.add('on'); inp.placeholder = L('Lyssnar… säg varorna i lugn takt. Tryck på mikrofonen när du är klar.', 'Listening… say the items at your own pace. Tap the mic when done.');
+      try { startRec(); } catch { L0.end(); }
     });
   }
 
