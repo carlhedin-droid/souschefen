@@ -367,7 +367,8 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
     const inp = $('#addInput'), raw = inp.value.trim(), lines = raw.split(/[,\n;]/).map(x => x.trim()).filter(Boolean);
     if (!lines.length) return;
     inp.value = ''; inp.focus();
-    if (looksFree(raw) && navigator.onLine) {
+    const spoken = S.voice; S.voice = false;
+    if ((spoken || looksFree(raw)) && navigator.onLine) {
       toast(L('Sorterar…', 'Sorting…'), 20000);
       try {
         const items = await aiSort(raw), n = addItems(items), per = {};
@@ -378,9 +379,32 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
         toast(err.message === 'nokey' ? L('Ingen Gemini-nyckel – lade till som vanligt.', 'No Gemini key – added as usual.') : L('Kunde inte sortera – lade till som vanligt.', 'Could not sort – added as usual.'), 3500);
       }
     }
-    const n = addItems(lines);
+    const n = addItems(spoken ? lines.flatMap(x => x.split(/\s+(?:och|and)\s+/i)).map(x => x.trim()).filter(Boolean) : lines);
     if (n > 1) toast(L(`${n} varor tillagda`, `${n} items added`));
   });
+  /* ---------- Tala in: webbläsarens taligenkänning, texten sorteras sedan av Gemini ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const mic = $('#micBtn');
+  if (SR) {
+    mic.hidden = false;
+    mic.setAttribute('aria-label', L('Tala in varor', 'Speak items'));
+    let rec = null;
+    mic.addEventListener('click', () => {
+      if (rec) { rec.stop(); return; }
+      const inp = $('#addInput'), before = inp.value.trim(), ph = inp.placeholder;
+      rec = new SR(); rec.lang = EN ? 'en-GB' : 'sv-SE'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+      let finalText = '';
+      rec.onresult = ev => { let interim = ''; for (let k = ev.resultIndex; k < ev.results.length; k++) { const t = ev.results[k][0].transcript; if (ev.results[k].isFinal) finalText += t + ' '; else interim += t; } inp.value = [before, (finalText + interim).trim()].filter(Boolean).join(', '); };
+      rec.onerror = ev => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast(L('Mikrofonen är blockerad – tillåt den i webbläsarens inställningar.', 'The microphone is blocked – allow it in the browser settings.'), 4000); else if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast(L('Kunde inte höra – försök igen.', 'Could not hear – try again.'), 2500); };
+      rec.onend = () => {
+        rec = null; mic.classList.remove('on'); inp.placeholder = ph;
+        if (finalText.trim()) { S.voice = true; $('#addForm').requestSubmit(); }
+      };
+      mic.classList.add('on'); inp.placeholder = L('Lyssnar… säg t.ex. "mjölk, två avokado och tandkräm"', 'Listening… e.g. "milk, two avocados and toothpaste"');
+      try { rec.start(); } catch { rec = null; mic.classList.remove('on'); inp.placeholder = ph; }
+    });
+  }
+
   document.addEventListener('input', e => { if (e.target.id === 'pantrySearch') { S.pq = e.target.value; filterPantry(); } });
   document.addEventListener('submit', e => {
     if (e.target.matches('[data-newlist]')) { e.preventDefault(); const v = $('#newList').value.trim(); if (v) { S.panel = ''; createList(v); render(); } }

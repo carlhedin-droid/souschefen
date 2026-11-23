@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css?v=50">
-<link rel="stylesheet" href="lista.css?v=6">
+<link rel="stylesheet" href="lista.css?v=7">
 </head>
 <body class="hl-body">
 <div class="hl" id="hl">
@@ -27,6 +27,7 @@
   <div id="listTools"></div>
   <form class="hl-add" id="addForm" autocomplete="off" hidden>
     <input id="addInput" enterkeyhint="done" placeholder="T.ex. mjölk, 2 avokado" aria-label="Lägg till varor">
+    <button class="hl-mic" type="button" id="micBtn" hidden><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg></button>
     <button class="btn" type="submit" aria-label="Lägg till">+</button>
   </form>
   <main id="main" class="hl-main"><p class="muted">Laddar…</p></main>
@@ -35,6 +36,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="../firebase-config.js?v=1"></script>
 <script src="../qty.js?v=2"></script>
-<script src="lista.js?v=7"></script>
+<script src="lista.js?v=8"></script>
 </body>
 </html>

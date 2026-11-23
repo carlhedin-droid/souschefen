@@ -103,3 +103,9 @@ body.hl-body { overflow: auto; height: auto; min-height: 100%; }
 .hl-pitem[aria-pressed="true"] { background: var(--pandan-soft); border-color: var(--pandan); }
 .hl-pitem[aria-pressed="true"]::before { background: var(--pandan); border-color: var(--pandan); box-shadow: inset 0 0 0 3px var(--pandan-soft); }
 .hl-pnone[hidden] { display: none; }
+
+/* Tala in */
+.hl-mic { flex: none; width: 50px; min-height: 50px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); display: grid; place-items: center; padding: 0; }
+.hl-mic[hidden] { display: none; }
+.hl-mic.on { background: var(--sambal); border-color: var(--sambal); color: #fff; animation: hl-pulse 1.2s ease-in-out infinite; }
+@keyframes hl-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sambal) 45%, transparent); } 50% { box-shadow: 0 0 0 10px transparent; } }
