@@ -17,7 +17,7 @@
   function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms); }
 
   const S = { user: undefined, fid: null, lists: [], items: [], pantry: [], listId: lsGet('hl.list') || '', ready: false, err: '',
-    panel: '', listsLoaded: false, catalog: [], pq: '' };
+    panel: '', tab: 'list', listsLoaded: false, catalog: [], pq: '' };
   let db, auth, unsubs = [];
 
   // Statiska texter
@@ -62,7 +62,7 @@
       S.listsLoaded = true; S.ready = true; render();
     }, onErr));
     unsubs.push(f.collection('items').onSnapshot(q => { S.items = q.docs.map(d => ({ id: d.id, ...d.data() })); if (!q.metadata.fromCache && !purgeOld.done) { purgeOld.done = true; purgeOld(); } render(); }, onErr));
-    unsubs.push(f.collection('state').doc('core').onSnapshot(d => { const P = d.exists ? d.data().prefs || {} : {}; S.pantry = Array.isArray(P.pantry) ? P.pantry : []; S.catalog = Array.isArray(P.pantryCatalog) ? P.pantryCatalog : []; if (S.panel === 'pantry') render(); }, () => {}));
+    unsubs.push(f.collection('state').doc('core').onSnapshot(d => { const P = d.exists ? d.data().prefs || {} : {}; S.pantry = Array.isArray(P.pantry) ? P.pantry : []; S.catalog = Array.isArray(P.pantryCatalog) ? P.pantryCatalog : []; if (S.tab === 'pantry') render(); }, () => {}));
   }
   function onErr(e) { console.warn('Firestore', e); S.err = e.message || String(e); render(); }
   const fam = n => db.collection('families').doc(S.fid).collection(n);
@@ -284,19 +284,20 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
     const openCount = id => S.items.filter(i => i.listId === id && !i.done).length;
     lists.innerHTML = S.lists.map(l => `<button type="button" class="hl-list${l.id === S.listId ? ' on' : ''}" data-list="${esc(l.id)}" aria-pressed="${l.id === S.listId}">${esc(l.name)}${openCount(l.id) ? ` <span>${openCount(l.id)}</span>` : ''}</button>`).join('')
       + `<button type="button" class="hl-list hl-new" data-panel="new" aria-label="${L('Ny lista', 'New list')}">+</button>`;
-    form.hidden = !cur;
 
     // Verktyg för listan
     const grocery = isGrocery(cur);
-    if (!grocery && S.panel === 'pantry') S.panel = '';
     const pantry = S.pantry.filter(p => !isGiven(p));
-    const recipes = cur ? window.shopRecipes(S.items.filter(i => i.listId === cur.id && !i.done)) : [];
-    if (!recipes.length && S.panel === 'recipes') S.panel = '';
-    let toolsHtml = cur ? `<div class="hl-tools">
-      <button type="button" class="ghost small" data-panel="common" aria-pressed="${S.panel === 'common'}">⭐ ${L('Vanliga', 'Usual')}</button>
-      ${recipes.length ? `<button type="button" class="ghost small" data-panel="recipes" aria-pressed="${S.panel === 'recipes'}">🍽 ${L('Recept', 'Recipes')} (${recipes.length})</button>` : ''}
-      ${grocery ? `<button type="button" class="ghost small" data-panel="pantry" aria-pressed="${S.panel === 'pantry'}">🥫 ${L('Fyll på skafferiet', 'Restock pantry')}</button>` : ''}
-      <button type="button" class="ghost small" data-panel="edit" aria-pressed="${S.panel === 'edit'}" aria-label="${L('Ändra listan', 'Edit list')}">⋯</button></div>` : '';
+    const openHere = cur ? S.items.filter(i => i.listId === cur.id && !i.done) : [], onList = new Set(openHere.map(i => fold(i.text)));
+    const recipes = window.shopRecipes(openHere);
+    const tabs = cur ? [['list', L('Listan', 'List'), openHere.length], ['common', L('Vanliga', 'Usual'), commonItems(cur).filter(x => x.on).length],
+      ...(grocery ? [['pantry', L('Skafferiet', 'Pantry'), pantry.filter(x => onList.has(fold(x))).length]] : []),
+      ...(recipes.length ? [['recipes', L('Recept', 'Recipes'), recipes.length]] : [])] : [];
+    if (!tabs.some(t => t[0] === S.tab)) S.tab = 'list';
+    form.hidden = !cur || S.tab !== 'list';
+    let tabHtml = '';
+    let toolsHtml = cur ? `<div class="hl-tabs" role="tablist">${tabs.map(([k, name, n]) => `<button type="button" role="tab" class="hl-tab" data-tab="${k}" aria-selected="${S.tab === k}">${esc(name)}${n ? ` <span>${n}</span>` : ''}</button>`).join('')}
+      <button type="button" class="hl-tab hl-more" data-panel="edit" aria-pressed="${S.panel === 'edit'}" aria-label="${L('Ändra listan', 'Edit list')}">⋯</button></div>` : '';
     if (S.panel === 'new') toolsHtml += `<div class="hl-panel"><form data-newlist><label for="newList">${L('Ny lista', 'New list')}</label>
         <div class="hl-row"><input id="newList" placeholder="${L('T.ex. Bauhaus', 'E.g. Bauhaus')}"><button class="btn small" type="submit">${L('Skapa', 'Create')}</button></div>
         <div class="chips">${PRESETS().filter(p => !S.lists.some(l => fold(l.name) === fold(p))).map(p => `<button type="button" class="chip" data-preset="${esc(p)}">${esc(p)}</button>`).join('')}</div></form></div>`;
@@ -304,13 +305,10 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
         <div class="hl-row"><input id="renameList" value="${esc(cur.name)}"><button class="btn small" type="submit">${L('Spara', 'Save')}</button></div></form>
         <label class="hl-kind"><input type="checkbox" data-kind ${grocery ? 'checked' : ''}> ${L('Mataffär – sortera på avdelningar och visa skafferiet', 'Grocery store – sort by aisle and show the pantry')}</label>
         <div class="hl-row" style="margin-top:10px"><button type="button" class="ghost small danger" data-dellist>${L('Ta bort listan', 'Delete list')}</button></div></div>`;
-    if (S.panel === 'pantry' && cur) {
-      const onList = new Set(S.items.filter(i => i.listId === S.listId && !i.done).map(i => fold(i.text)));
-      const groups = pantryGroups(pantry), nOn = pantry.filter(p => onList.has(fold(p))).length;
-      toolsHtml += `<div class="hl-panel hl-pantry">
-        <div class="hl-pantry-head"><div><strong>${L('Vad är slut?', 'What has run out?')}</strong>
-          <p class="hint">${L('Tryck på det som ska köpas – tryck igen för att ångra. Samma skafferi som i Souschefen, i samma grupper.', 'Tap what needs buying – tap again to undo. Same pantry as in Souschefen, in the same groups.')}</p></div>
-          <button type="button" class="btn small" data-panel="pantry">${L('Klar', 'Done')}${nOn ? ` (${nOn})` : ''}</button></div>
+    if (S.tab === 'pantry' && cur) {
+      const groups = pantryGroups(pantry);
+      tabHtml = `<div class="hl-tabpage">
+        <p class="hint hl-tabhint">${L('Vad är slut? Tryck på det som ska köpas – tryck igen för att ångra. Samma skafferi och grupper som i Souschefen.', 'What has run out? Tap what needs buying – tap again to undo. Same pantry and groups as in Souschefen.')}</p>
         ${pantry.length > 12 ? `<input type="search" id="pantrySearch" class="hl-psearch" placeholder="${L('Sök i skafferiet', 'Search the pantry')}" value="${esc(S.pq)}" autocomplete="off">` : ''}
         ${pantry.length ? groups.map(g => { const n = g.items.filter(p => onList.has(fold(p))).length; return `<section class="hl-pg">
           <h3>${esc(g.group)}${n ? ` <span>${n} ${L('på listan', 'on the list')}</span>` : ''}</h3>
@@ -318,27 +316,30 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
           : `<p class="muted">${L('Skafferiet är tomt. Fyll i det i Souschefen under Inställningar → Skafferiet.', 'The pantry is empty. Fill it in Souschefen under Settings → Pantry.')}</p>`}
         <p class="muted hl-pnone" hidden>${L('Inget i skafferiet matchar.', 'Nothing in the pantry matches.')}</p></div>`;
     }
-    if (S.panel === 'recipes' && cur) toolsHtml += `<div class="hl-panel"><p class="hint">${L('Stryk ett recept så försvinner bara dess del av mängden. Det som andra recept eller ni själva lagt till ligger kvar.', 'Remove a recipe and only its share of the amounts goes. What other recipes or you added stays.')}</p>
+    if (S.tab === 'recipes' && cur) tabHtml = `<div class="hl-tabpage"><p class="hint hl-tabhint">${L('Stryk ett recept så försvinner bara dess del av mängden. Det som andra recept eller ni själva lagt till ligger kvar.', 'Remove a recipe and only its share of the amounts goes. What other recipes or you added stays.')}</p>
         <ul class="hl-recipes">${recipes.map(x => `<li><span>${esc(x.name)} <small>${x.n} ${L(x.n === 1 ? 'vara' : 'varor', x.n === 1 ? 'item' : 'items')}</small></span><button type="button" class="ghost small danger" data-unrecipe="${esc(x.name)}">${L('Stryk', 'Remove')}</button></li>`).join('')}</ul></div>`;
-    if (S.panel === 'common' && cur) {
-      const items = commonItems(cur), nOn = items.filter(x => x.on).length, groups = [], by = {};
+    if (S.tab === 'common' && cur) {
+      const items = commonItems(cur), groups = [], by = {};
       if (grocery) {
         const ord = Object.fromEntries(DEPTS.map((d, n) => [d[0], n]));
         items.forEach(x => { const k = deptOf(x.text); if (!by[k]) groups.push(by[k] = { k, items: [] }); by[k].items.push(x); });
         groups.sort((a, b) => ord[a.k] - ord[b.k]).forEach(g => { const d = DEPTS[ord[g.k]]; g.name = `${d[1]} ${L(d[2], d[3])}`; g.items.sort((a, b) => a.text.localeCompare(b.text, 'sv')); });
       } else groups.push({ name: '', items });
-      toolsHtml += `<div class="hl-panel hl-pantry">
-        <div class="hl-pantry-head"><div><strong>${L('Vanliga varor', 'Usual items')}</strong>
-          <p class="hint">${L('Tryck för att lägga på listan – tryck igen för att ta bort. Listan lär sig av det ni handlar.', 'Tap to add to the list – tap again to remove. Learns from what you buy.')}</p></div>
-          <button type="button" class="btn small" data-panel="common">${L('Klar', 'Done')}${nOn ? ` (${nOn})` : ''}</button></div>
+      tabHtml = `<div class="hl-tabpage">
+        <p class="hint hl-tabhint">${L('Tryck för att lägga på listan – tryck igen för att ta bort. Lär sig av det ni handlar.', 'Tap to add to the list – tap again to remove. Learns from what you buy.')}</p>
         ${items.length ? groups.map(g => `${g.name ? `<h3 class="hl-group">${esc(g.name)}</h3>` : ''}<ul class="hl-items">${g.items.map(x => `<li class="hl-item">
           <button type="button" class="hl-check" data-common="${esc(x.text)}" aria-pressed="${x.on}"><span class="box" aria-hidden="true"></span><span class="txt">${esc(x.text)}</span>${x.n > 1 ? `<span class="qty">${x.n}×</span>` : ''}</button></li>`).join('')}</ul>`).join('')
           : `<p class="muted">${L('Inga vanliga varor än – de dyker upp när ni handlat från listan.', 'No usual items yet – they appear once you have shopped from the list.')}</p>`}</div>`;
     }
     const refocus = document.activeElement?.id === 'pantrySearch';
     tools.innerHTML = toolsHtml;
-    if (S.panel === 'pantry') { filterPantry(); if (refocus) { const el = $('#pantrySearch'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); } } else S.pq = '';
 
+    if (cur && S.tab !== 'list') {
+      main.innerHTML = tabHtml + (S.err ? `<p class="hl-err">${esc(S.err)}</p>` : '');
+      if (S.tab === 'pantry') { filterPantry(); if (refocus) { const el = $('#pantrySearch'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+      return;
+    }
+    S.pq = '';
     if (!cur) { main.innerHTML = S.listsLoaded ? `<p class="muted">${L('Skapa en lista med +.', 'Create a list with +.')}</p>` : `<p class="muted">${L('Laddar…', 'Loading…')}</p>`; return; }
     const mine = S.items.filter(i => i.listId === S.listId);
     const open = mine.filter(i => !i.done).sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
@@ -357,7 +358,7 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
         <button type="button" class="hl-check" data-buy="${esc(i.id)}" aria-label="${L(`${esc(i.text)} – handlad`, `${esc(i.text)} – bought`)}"><span class="box" aria-hidden="true"></span><span class="txt">${esc(i.text)}${grocery && i.recipe ? `<small class="src">${esc(i.recipe)}</small>` : ''}</span>${i.qty ? `<span class="qty">${esc(i.qty)}</span>` : ''}</button>
         <button type="button" class="hl-del" data-del="${esc(i.id)}" aria-label="${L(`Ta bort ${esc(i.text)}`, `Remove ${esc(i.text)}`)}">×</button></li>`;
     main.innerHTML = (open.length ? groups.map(g => `${g.name ? `<h2 class="hl-group">${esc(g.name)}</h2>` : ''}<ul class="hl-items">${g.items.map(row).join('')}</ul>`).join('')
-        : `<div class="hl-empty small"><p>${boughtToday ? L('Allt är handlat 🎉', 'All done 🎉') : L('Listan är tom. Skriv ovan, eller tryck på "Till inköpslistan" i ett recept i Souschefen.', 'The list is empty. Type above, or tap "To shopping list" on a recipe in Souschefen.')}</p></div>`)
+        : `<div class="hl-empty small"><p>${boughtToday ? L('Allt är handlat 🎉', 'All done 🎉') : L('Listan är tom. Skriv eller tala in ovan, välj bland Vanliga, eller tryck på "Till inköpslistan" i ett recept i Souschefen.', 'The list is empty. Type above, or tap "To shopping list" on a recipe in Souschefen.')}</p></div>`)
       + (S.err ? `<p class="hl-err">${esc(S.err)}</p>` : '');
   }
 
@@ -414,6 +415,7 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
     const t = e.target;
     if (t.closest('[data-signin]')) { signIn(); return; }
     const li = t.closest('[data-list]'); if (li) { S.listId = li.dataset.list; lsSet('hl.list', S.listId); S.panel = S.panel === 'new' ? '' : (S.panel === 'edit' ? '' : S.panel); render(); return; }
+    const tb = t.closest('[data-tab]'); if (tb) { S.tab = tb.dataset.tab; S.panel = ''; render(); window.scrollTo({ top: 0 }); return; }
     const pn = t.closest('[data-panel]'); if (pn) { S.panel = S.panel === pn.dataset.panel ? '' : pn.dataset.panel; render(); if (S.panel === 'new') $('#newList')?.focus(); return; }
     const pr = t.closest('[data-preset]'); if (pr) { S.panel = ''; createList(pr.dataset.preset); render(); return; }
     if (t.closest('[data-dellist]')) { deleteList(S.listId); return; }

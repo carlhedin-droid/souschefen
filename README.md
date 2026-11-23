@@ -30,7 +30,8 @@ Egen app på `/lista/` (t.ex. souschefen.pages.dev/lista/) med egen hemskärmsik
 
 - **Från receptet:** "Till inköpslistan" under ingredienserna. Det som finns i skafferiet hamnar under "Har ni troligen hemma" (inte förbockat). Mängder följer valda portioner och dubbletter slås ihop och summeras (200 g + 300 g = 500 g, 1 dl + 2 msk = 1,3 dl).
 - **Listor:** flera listor (Mat, Bygghandel, Apotek …), snabbinmatning ("mjölk, ägg, 2 avokado"), bocka av i realtid för hela familjen. Det som handlas försvinner direkt (Ångra i fem sekunder); det som inte fanns ligger kvar. Mataffärslistor sorteras i en fast butiksordning med frysvaror sist. Skärmen hålls tänd medan listan är öppen.
-- **Vanliga varor:** knappen ⭐ Vanliga öppnar en lista per avdelning där ett tryck lägger till och ett till tar bort, lärda från det ni handlat de senaste tre månaderna, med en startlista (mjölk, bröd, ägg …) tills historiken räcker.
+- **Flikar:** varje lista har flikarna Listan, Vanliga, Skafferiet (bara mataffär) och Recept (när det finns recept på listan), med antal på fliken.
+- **Vanliga varor:** fliken Vanliga visar en lista per avdelning där ett tryck lägger till och ett till tar bort, lärda från det ni handlat de senaste tre månaderna, med en startlista (mjölk, bröd, ägg …) tills historiken räcker.
 - **Stryk ett recept:** knappen Recept i listan. Varje vara minns hur mycket som kom från vilket recept, så bara receptets del av mängden försvinner (Ångra finns).
 - **Tala in:** mikrofonknappen bredvid fältet (om webbläsaren har taligenkänning). Det man säger sorteras av Gemini precis som fritext.
 - **Fritext:** skriv t.ex. "tacos fredag + kaffe och tandkräm" så delar Gemini upp det i varor på rätt listor och lägger in det som behövs till rätten (utom det som finns i skafferiet). Vanliga rader ("mjölk, 2 avokado") läggs till direkt utan AI.
