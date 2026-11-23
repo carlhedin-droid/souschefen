@@ -122,3 +122,9 @@ body.hl-body { overflow: auto; height: auto; min-height: 100%; }
 .hl-tabhint { margin: 0 2px 10px; }
 .hl-tabpage .hl-items { background: var(--surface); }
 .hl-tabs.plain { border-bottom: 0; margin-bottom: 4px; }
+
+/* Inbyggd webbläsare (Messenger m.fl.) */
+.inapp-box { margin: 14px 0; padding: 14px 16px; border-radius: 14px; background: var(--surface, #fff); border: 2px solid var(--kunyit, #e0a526); display: grid; gap: 8px; text-align: left; }
+.inapp-box p { margin: 0; }
+.inapp-box .btn, .inapp-box .ghost { justify-self: start; text-decoration: none; }
+.inapp-box a.btn, .inapp-box a.btn:visited { color: var(--pandan-ink, #fff); background: var(--pandan, #2e6b4f); }

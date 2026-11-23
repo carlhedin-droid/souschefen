@@ -196,6 +196,25 @@ window.Cloud = (() => {
   }
 
   /* ---------- Vyer ---------- */
+
+  // Inbyggda webbläsare i Messenger, Facebook, Instagram m.fl. – där tillåter inte Google inloggning
+  const inAppBrowser = () => {
+    const ua = navigator.userAgent || '';
+    if (/FBAN|FBAV|FB_IAB|FBIOS|FB4A|Messenger|Instagram|Line\/|Snapchat|LinkedInApp|MicroMessenger|TikTok|musical_ly/i.test(ua)) return true;
+    return /Android/.test(ua) && /; wv\)/.test(ua);
+  };
+  function inAppHelp(L, esc) {
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent), url = location.href.split('#')[0];
+    const open = ios ? 'x-safari-' + url : `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+    return `<div class="inapp-box">
+      <strong>${L('Öppna i webbläsaren för att logga in', 'Open in your browser to sign in')}</strong>
+      <p>${L(`Länken öppnades i appens inbyggda webbläsare (t.ex. Messenger). Där tillåter inte Google inloggning.`, `The link opened in the app's built-in browser (e.g. Messenger). Google does not allow sign-in there.`)}</p>
+      <a class="btn" href="${esc(open)}">${ios ? L('Öppna i Safari', 'Open in Safari') : L('Öppna i Chrome', 'Open in Chrome')}</a>
+      <p class="hint">${ios ? L('Fungerar inte knappen? Tryck på ••• eller dela-ikonen och välj Öppna i Safari.', 'Button not working? Tap ••• or the share icon and choose Open in Safari.') : L('Fungerar inte knappen? Tryck på ⋮ och välj Öppna i webbläsaren.', 'Button not working? Tap ⋮ and choose Open in browser.')}</p>
+      <button type="button" class="ghost" data-copylink>${L('Kopiera länken', 'Copy the link')}</button>
+    </div>`;
+  }
+  
   function viewLogin() {
     const busy = !C.auth || (signedInHint() && C.user === null && !C.error);
     return `<section class="welcome">
@@ -204,7 +223,7 @@ window.Cloud = (() => {
         <h1>Souschefen</h1>
         <div class="field">${langPicker()}</div>
         <p class="w-lead">${L(`Familjens kockcoach och kokbok. Logga in med ert Google-konto – samma kokbok, historik och chatt på alla era enheter.`, `Your family's cooking coach and cookbook. Sign in with your Google account – same cookbook, history and chat on all your devices.`)}</p>
-        ${busy ? `<p class="muted">${L('Loggar in…', 'Signing in…')}</p>` : `<button class="btn google-btn" data-signin>
+        ${inAppBrowser() ? inAppHelp(L, esc) : busy ? `<p class="muted">${L('Loggar in…', 'Signing in…')}</p>` : `<button class="btn google-btn" data-signin>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z"/><path fill="#fff" opacity=".85" d="M12 22c2.7 0 5-.9 6.6-2.5l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z"/><path fill="#fff" opacity=".7" d="M6.4 13.9a6 6 0 0 1 0-3.8V7.5H3.1a10 10 0 0 0 0 9l3.3-2.6Z"/><path fill="#fff" opacity=".55" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.8 9.4 6 12 6Z"/></svg>
           ${L('Logga in med Google', 'Sign in with Google')}</button>`}
         ${C.error ? `<p class="status-line" style="color:var(--sambal)">${esc(C.error)}</p>` : ''}

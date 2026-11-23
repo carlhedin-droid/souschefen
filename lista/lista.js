@@ -265,13 +265,32 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
   window.addEventListener('online', updateOnline); window.addEventListener('offline', updateOnline);
 
   const PRESETS = () => [L('Mat', 'Groceries'), L('Bygghandel', 'Hardware store'), L('Apotek', 'Pharmacy'), L('Köpcentrum', 'Shopping centre'), L('Systembolaget', 'Systembolaget')];
+
+  // Inbyggda webbläsare i Messenger, Facebook, Instagram m.fl. – där tillåter inte Google inloggning
+  const inAppBrowser = () => {
+    const ua = navigator.userAgent || '';
+    if (/FBAN|FBAV|FB_IAB|FBIOS|FB4A|Messenger|Instagram|Line\/|Snapchat|LinkedInApp|MicroMessenger|TikTok|musical_ly/i.test(ua)) return true;
+    return /Android/.test(ua) && /; wv\)/.test(ua);
+  };
+  function inAppHelp(L, esc) {
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent), url = location.href.split('#')[0];
+    const open = ios ? 'x-safari-' + url : `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+    return `<div class="inapp-box">
+      <strong>${L('Öppna i webbläsaren för att logga in', 'Open in your browser to sign in')}</strong>
+      <p>${L(`Länken öppnades i appens inbyggda webbläsare (t.ex. Messenger). Där tillåter inte Google inloggning.`, `The link opened in the app's built-in browser (e.g. Messenger). Google does not allow sign-in there.`)}</p>
+      <a class="btn" href="${esc(open)}">${ios ? L('Öppna i Safari', 'Open in Safari') : L('Öppna i Chrome', 'Open in Chrome')}</a>
+      <p class="hint">${ios ? L('Fungerar inte knappen? Tryck på ••• eller dela-ikonen och välj Öppna i Safari.', 'Button not working? Tap ••• or the share icon and choose Open in Safari.') : L('Fungerar inte knappen? Tryck på ⋮ och välj Öppna i webbläsaren.', 'Button not working? Tap ⋮ and choose Open in browser.')}</p>
+      <button type="button" class="ghost" data-copylink>${L('Kopiera länken', 'Copy the link')}</button>
+    </div>`;
+  }
+  
   function render() {
     const main = $('#main'), form = $('#addForm'), lists = $('#lists'), tools = $('#listTools');
     if (!S.ready) return;
     if (S.user === null) {
       form.hidden = true; lists.innerHTML = ''; tools.innerHTML = '';
       main.innerHTML = `<div class="hl-empty"><h2>${L('Logga in', 'Sign in')}</h2><p>${L('Inköpslistan delas med familjen via samma Google-konto som Souschefen.', 'The shopping list is shared with your family through the same Google account as Souschefen.')}</p>
-        <button class="btn" data-signin>${L('Logga in med Google', 'Sign in with Google')}</button>${S.err ? `<p class="hl-err">${esc(S.err)}</p>` : ''}</div>`;
+        ${inAppBrowser() ? inAppHelp(L, esc) : `<button class="btn" data-signin>${L('Logga in med Google', 'Sign in with Google')}</button>`}${S.err ? `<p class="hl-err">${esc(S.err)}</p>` : ''}</div>`;
       return;
     }
     if (!S.fid) {
@@ -443,6 +462,7 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
   document.addEventListener('click', e => {
     const t = e.target;
     if (t.closest('[data-signin]')) { signIn(); return; }
+    if (t.closest('[data-copylink]')) { navigator.clipboard?.writeText(location.href.split('#')[0]).then(() => alert(L('Länken är kopierad – klistra in den i Safari eller Chrome.', 'Link copied – paste it into Safari or Chrome.')), () => prompt(L('Kopiera länken:', 'Copy the link:'), location.href)); return; }
     const li = t.closest('[data-list]'); if (li) { S.listId = li.dataset.list; lsSet('hl.list', S.listId); S.panel = S.panel === 'new' ? '' : (S.panel === 'edit' ? '' : S.panel); render(); return; }
     const tb = t.closest('[data-tab]'); if (tb) { S.tab = tb.dataset.tab; S.panel = ''; render(); window.scrollTo({ top: 0 }); return; }
     const pn = t.closest('[data-panel]'); if (pn) { S.panel = S.panel === pn.dataset.panel ? '' : pn.dataset.panel; render(); if (S.panel === 'new') $('#newList')?.focus(); return; }

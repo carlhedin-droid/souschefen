@@ -972,3 +972,9 @@ a.howto { text-decoration: none; color: var(--ink); }
 .rtab-x { flex: none; background: none; border: 0; color: inherit; opacity: .6; font-size: 18px; line-height: 1; padding: 6px 10px 6px 6px; cursor: pointer; min-height: 38px; }
 .rtab-x:hover { opacity: 1; }
 .stage.split .rtabs { margin-bottom: 8px; }
+
+/* Inbyggd webbläsare (Messenger m.fl.) */
+.inapp-box { margin: 14px 0; padding: 14px 16px; border-radius: 14px; background: var(--surface, #fff); border: 2px solid var(--kunyit, #e0a526); display: grid; gap: 8px; text-align: left; }
+.inapp-box p { margin: 0; }
+.inapp-box .btn, .inapp-box .ghost { justify-self: start; text-decoration: none; }
+.inapp-box a.btn, .inapp-box a.btn:visited { color: var(--pandan-ink, #fff); background: var(--pandan, #2e6b4f); }

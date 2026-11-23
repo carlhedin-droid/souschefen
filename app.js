@@ -2773,6 +2773,7 @@ $('#stage').addEventListener('click', async e => {
   if (t.closest('[data-healthwhy]')) { S.healthOpen = !S.healthOpen; keepScroll(renderStage); return; }
   const tsw = t.closest('[data-rtabsw]'); if (tsw) { switchTab(tsw.dataset.rtabsw); return; }
   const tsx = t.closest('[data-rtabx]'); if (tsx) { closeTab(tsx.dataset.rtabx); return; }
+  if (t.closest('[data-copylink]')) { const u = location.href.split('#')[0]; navigator.clipboard?.writeText(u).then(() => toast(L('Länken är kopierad – klistra in den i Safari eller Chrome.', 'Link copied – paste it into Safari or Chrome.'), 4000), () => prompt(L('Kopiera länken:', 'Copy the link:'), u)); return; }
   const rt = t.closest('[data-rtab]');
   if (rt) {
     const was = S.rTab || 'ing'; S.rTab = rt.dataset.rtab === 'cook' ? 'ing' : rt.dataset.rtab;
