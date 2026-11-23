@@ -290,13 +290,14 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
     const pantry = S.pantry.filter(p => !isGiven(p));
     const openHere = cur ? S.items.filter(i => i.listId === cur.id && !i.done) : [], onList = new Set(openHere.map(i => fold(i.text)));
     const recipes = window.shopRecipes(openHere);
-    const tabs = cur ? [['list', L('Listan', 'List'), openHere.length], ['common', L('Vanliga', 'Usual'), commonItems(cur).filter(x => x.on).length],
-      ...(grocery ? [['pantry', L('Skafferiet', 'Pantry'), pantry.filter(x => onList.has(fold(x))).length]] : []),
+    const tabs = cur && grocery ? [['list', L('Listan', 'List'), openHere.length], ['common', L('Vanliga', 'Usual'), commonItems(cur).filter(x => x.on).length],
+      ['pantry', L('Skafferiet', 'Pantry'), pantry.filter(x => onList.has(fold(x))).length],
       ...(recipes.length ? [['recipes', L('Recept', 'Recipes'), recipes.length]] : [])] : [];
     if (!tabs.some(t => t[0] === S.tab)) S.tab = 'list';
     form.hidden = !cur || S.tab !== 'list';
     let tabHtml = '';
-    let toolsHtml = cur ? `<div class="hl-tabs" role="tablist">${tabs.map(([k, name, n]) => `<button type="button" role="tab" class="hl-tab" data-tab="${k}" aria-selected="${S.tab === k}">${esc(name)}${n ? ` <span>${n}</span>` : ''}</button>`).join('')}
+    // Bara mataffärslistor har underflikar; övriga listor är bara listan
+    let toolsHtml = cur ? `<div class="hl-tabs${tabs.length ? '' : ' plain'}" role="tablist">${tabs.map(([k, name, n]) => `<button type="button" role="tab" class="hl-tab" data-tab="${k}" aria-selected="${S.tab === k}">${esc(name)}${n ? ` <span>${n}</span>` : ''}</button>`).join('')}
       <button type="button" class="hl-tab hl-more" data-panel="edit" aria-pressed="${S.panel === 'edit'}" aria-label="${L('Ändra listan', 'Edit list')}">⋯</button></div>` : '';
     if (S.panel === 'new') toolsHtml += `<div class="hl-panel"><form data-newlist><label for="newList">${L('Ny lista', 'New list')}</label>
         <div class="hl-row"><input id="newList" placeholder="${L('T.ex. Bauhaus', 'E.g. Bauhaus')}"><button class="btn small" type="submit">${L('Skapa', 'Create')}</button></div>
@@ -358,7 +359,7 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
         <button type="button" class="hl-check" data-buy="${esc(i.id)}" aria-label="${L(`${esc(i.text)} – handlad`, `${esc(i.text)} – bought`)}"><span class="box" aria-hidden="true"></span><span class="txt">${esc(i.text)}${grocery && i.recipe ? `<small class="src">${esc(i.recipe)}</small>` : ''}</span>${i.qty ? `<span class="qty">${esc(i.qty)}</span>` : ''}</button>
         <button type="button" class="hl-del" data-del="${esc(i.id)}" aria-label="${L(`Ta bort ${esc(i.text)}`, `Remove ${esc(i.text)}`)}">×</button></li>`;
     main.innerHTML = (open.length ? groups.map(g => `${g.name ? `<h2 class="hl-group">${esc(g.name)}</h2>` : ''}<ul class="hl-items">${g.items.map(row).join('')}</ul>`).join('')
-        : `<div class="hl-empty small"><p>${boughtToday ? L('Allt är handlat 🎉', 'All done 🎉') : L('Listan är tom. Skriv eller tala in ovan, välj bland Vanliga, eller tryck på "Till inköpslistan" i ett recept i Souschefen.', 'The list is empty. Type above, or tap "To shopping list" on a recipe in Souschefen.')}</p></div>`)
+        : `<div class="hl-empty small"><p>${boughtToday ? L('Allt är handlat 🎉', 'All done 🎉') : (grocery ? L('Listan är tom. Skriv eller tala in ovan, välj bland Vanliga, eller tryck på "Till inköpslistan" i ett recept i Souschefen.', 'The list is empty. Type above, or tap "To shopping list" on a recipe in Souschefen.') : L('Listan är tom. Skriv eller tala in ovan.', 'The list is empty. Type or speak above.'))}</p></div>`)
       + (S.err ? `<p class="hl-err">${esc(S.err)}</p>` : '');
   }
 
