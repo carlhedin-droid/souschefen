@@ -52,3 +52,26 @@
     return [...out, ...rest].join(' + ');
   };
 })();
+
+/* Varje vara minns hur mycket som kom från vilket recept (from: { receptnamn: mängd, _: eget }),
+   så att ett recept kan strykas och bara dess del av mängden försvinner. */
+(() => {
+  const OWN = '_';
+  const legacyFrom = ex => ex.from && typeof ex.from === 'object' ? { ...ex.from } : { [ex.recipe || OWN]: ex.qty || '' };
+  const summarize = from => ({ from, qty: window.mergeQty(...Object.values(from)), recipe: Object.keys(from).filter(k => k !== OWN).join(', ') });
+  // Lägg till mängd från ett recept (eller eget = tom sträng) på en befintlig vara
+  window.shopMerge = (ex, recipe, qty) => { const f = legacyFrom(ex), k = recipe || OWN; f[k] = window.mergeQty(f[k], qty); return summarize(f); };
+  window.shopNew = (recipe, qty) => summarize({ [recipe || OWN]: qty || '' });
+  // Ta bort ett recepts del. Ger null om varan ska bort helt, annars de nya fälten.
+  window.shopRemoveRecipe = (ex, recipe) => {
+    if (!ex.from) {   // äldre varor utan uppdelning
+      const names = String(ex.recipe || '').split(', ').filter(Boolean);
+      if (!names.includes(recipe)) return undefined;
+      return names.length === 1 ? null : { recipe: names.filter(n => n !== recipe).join(', ') };
+    }
+    if (!(recipe in ex.from)) return undefined;
+    const f = { ...ex.from }; delete f[recipe];
+    return Object.keys(f).length ? summarize(f) : null;
+  };
+  window.shopRecipes = items => { const c = new Map(); items.forEach(i => String(i.recipe || '').split(', ').filter(Boolean).forEach(r => c.set(r, (c.get(r) || 0) + 1))); return [...c].map(([name, n]) => ({ name, n })); };
+})();

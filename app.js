@@ -1961,7 +1961,7 @@ async function invToShop() {
     const open = new Set(); (await famCol('items').where('listId', '==', listId).get()).forEach(d => { const x = d.data(); if (!x.done) open.add(fold(x.text)); });
     const batch = Cloud.state.db.batch(), t0 = Date.now(), who = Cloud.state.user?.displayName || Cloud.state.user?.email || '';
     const todo = iv.removed.filter(x => !open.has(fold(x)));
-    todo.forEach((x, k) => batch.set(famCol('items').doc(), { listId, text: x, qty: '', recipe: L('Skafferiet', 'Pantry'), done: false, addedAt: t0 + k, addedBy: who, stock: true }));
+    todo.forEach((x, k) => batch.set(famCol('items').doc(), { listId, text: x, ...window.shopNew(L('Skafferiet', 'Pantry'), ''), done: false, addedAt: t0 + k, addedBy: who, stock: true }));
     await batch.commit();
     toast(L(`${iv.removed.length} varor på inköpslistan. De kommer tillbaka i skafferiet när ni bockar av dem.`, `${iv.removed.length} items on the shopping list. They return to the pantry when you tick them off.`), 4000);
     iv.removed = []; keepScroll(renderStage);
@@ -2053,8 +2053,8 @@ async function addToShop() {
     let merged = 0;
     rows.forEach((x, k) => {
       const ex = existing[fold(x.name)];
-      if (ex) { merged++; batch.update(ex.ref, { qty: window.mergeQty(ex.qty, x.qty), recipe: ex.recipe && ex.recipe !== r.title ? `${ex.recipe}, ${r.title}` : r.title, updatedAt: now0 }); }
-      else batch.set(col.doc(), { listId: sh.listId, text: x.name, qty: x.qty || '', recipe: r.title, done: false, addedAt: now0 + k, addedBy: who, ...(x.stock && !isGiven(x.name) ? { stock: true } : {}) });
+      if (ex) { merged++; batch.update(ex.ref, { ...window.shopMerge(ex, r.title, x.qty), updatedAt: now0 }); }
+      else batch.set(col.doc(), { listId: sh.listId, text: x.name, ...window.shopNew(r.title, x.qty), done: false, addedAt: now0 + k, addedBy: who, ...(x.stock && !isGiven(x.name) ? { stock: true } : {}) });
     });
     await batch.commit();
     LS.set('fk.shopList', sh.listId);

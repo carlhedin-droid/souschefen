@@ -108,19 +108,82 @@
   const TAIL_RE = new RegExp(`^(.+?)\\s+(\\d+(?:[.,/]\\d+)?\\s*${UNIT}\\.?)$`, 'i');
   // "2 avokado" eller "grädde 1 dl" – mängden först eller sist
   function parseLine(line) { const m = line.match(QTY_RE); if (m) return { qty: m[1].trim(), text: m[2].trim() }; const t = line.match(TAIL_RE); return t ? { qty: t[2].trim(), text: t[1].trim() } : { qty: '', text: line.trim() }; }
+  // Rader som text ("2 avokado") eller färdiga poster { text, qty, listId, recipe }
   function addItems(lines, extra = {}) {
     if (!S.listId) return 0;
-    const open = {}; S.items.filter(i => i.listId === S.listId && !i.done).forEach(i => { open[fold(i.text)] = i; });
+    const entries = lines.map(x => typeof x === 'string' ? parseLine(x) : x).filter(x => x.text);
+    const open = {}; S.items.filter(i => !i.done).forEach(i => { open[i.listId + '|' + fold(i.text)] = i; });
     const batch = db.batch(), who = S.user?.displayName || S.user?.email || '', t0 = Date.now();
-    let n = 0;
-    lines.map(parseLine).filter(x => x.text).forEach((x, k) => {
-      const ex = open[fold(x.text)];
-      if (ex) { if (x.qty) { const qty = window.mergeQty(ex.qty, x.qty); batch.update(fam('items').doc(ex.id), { qty, updatedAt: t0 }); ex.qty = qty; } }
-      else { const ref = fam('items').doc(); batch.set(ref, { listId: S.listId, text: x.text, qty: x.qty, recipe: extra.recipe || '', done: false, addedAt: t0 + k, addedBy: who, ...(extra.stock ? { stock: true } : {}) }); open[fold(x.text)] = { id: ref.id, ...x }; }
-      n++;
+    entries.forEach((x, k) => {
+      const listId = S.lists.some(l => l.id === x.listId) ? x.listId : S.listId, recipe = x.recipe || extra.recipe || '', key = listId + '|' + fold(x.text);
+      const ex = open[key];
+      if (ex) { if (x.qty || recipe) { const upd = window.shopMerge(ex, recipe, x.qty); batch.update(fam('items').doc(ex.id), { ...upd, updatedAt: t0 }); Object.assign(ex, upd); } }
+      else { const ref = fam('items').doc(), doc = { listId, text: x.text, ...window.shopNew(recipe, x.qty), done: false, addedAt: t0 + k, addedBy: who, ...(extra.stock ? { stock: true } : {}) }; batch.set(ref, doc); open[key] = { id: ref.id, ...doc }; }
     });
     batch.commit().catch(onErr);   // offline: köas och skickas när täckningen kommer
-    return n;
+    return entries.length;
+  }
+
+  /* ---------- Stryk ett recept: bara receptets del av mängden försvinner ---------- */
+  function removeRecipe(name) {
+    const before = [], b = db.batch(); let n = 0;
+    S.items.filter(i => i.listId === S.listId && !i.done).forEach(i => {
+      const res = window.shopRemoveRecipe(i, name); if (res === undefined) return;
+      const { id, ...data } = i; before.push([id, data]); n++;
+      if (res === null) b.delete(fam('items').doc(id)); else b.update(fam('items').doc(id), { ...res, updatedAt: Date.now() });
+    });
+    if (!n) return;
+    b.commit().catch(onErr);
+    undoBar(L(`${name} struket (${n} ${n === 1 ? 'vara' : 'varor'})`, `${name} removed (${n} ${n === 1 ? 'item' : 'items'})`), () => {
+      const u = db.batch(); before.forEach(([id, data]) => u.set(fam('items').doc(id), data)); u.commit().catch(onErr);
+    });
+  }
+
+  /* ---------- Vanliga varor: lärs från det ni handlar, med en startlista ---------- */
+  const STARTERS = () => EN
+    ? ['Milk', 'Bread', 'Eggs', 'Butter', 'Cheese', 'Yoghurt', 'Coffee', 'Bananas', 'Apples', 'Cucumber', 'Tomatoes', 'Onions', 'Potatoes', 'Chicken fillets', 'Mince', 'Pasta', 'Rice', 'Juice', 'Toilet paper', 'Kitchen roll']
+    : ['Mjölk', 'Bröd', 'Ägg', 'Smör', 'Ost', 'Fil', 'Yoghurt', 'Pålägg', 'Kaffe', 'Bananer', 'Äpplen', 'Gurka', 'Tomater', 'Paprika', 'Gul lök', 'Potatis', 'Morötter', 'Kycklingfilé', 'Köttfärs', 'Pasta', 'Ris', 'Havregryn', 'Juice', 'Toalettpapper', 'Hushållspapper', 'Diskmedel'];
+  function commonItems(cur) {
+    const grocery = isGrocery(cur), on = new Set(S.items.filter(i => i.listId === cur.id && !i.done).map(i => fold(i.text)));
+    const seen = new Map();
+    S.items.filter(i => i.done && i.listId !== '__pantry' && (grocery ? isGrocery(S.lists.find(l => l.id === i.listId)) : i.listId === cur.id))
+      .forEach(i => { const k = fold(i.text), e = seen.get(k) || { text: i.text, n: 0, at: 0 }; e.n++; if ((i.doneAt || 0) > e.at) { e.at = i.doneAt || 0; e.text = i.text; } seen.set(k, e); });
+    const out = [...seen.values()].sort((a, b) => b.n - a.n || b.at - a.at).map(e => e.text);
+    if (grocery) STARTERS().forEach(t => { if (!seen.has(fold(t))) out.push(t); });
+    return out.filter(t => !on.has(fold(t))).slice(0, 16);
+  }
+
+  /* ---------- Fritext med Gemini: "tacos fredag + kaffe och tandkräm" ---------- */
+  const looksFree = raw => raw.split(/[,;\n]/).some(seg => { const w = seg.trim().split(/\s+/).filter(Boolean); return w.length > 3 || /(^|\s)(och|till|för|plus|and|for|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|ikväll|middag|lunch|helgen?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|dinner)(\s|$)|\+/i.test(seg); });
+  let geminiKey = null;
+  async function getKey() {
+    if (geminiKey === null) { try { const d = await fam('private').doc('keys').get(); geminiKey = (d.exists && d.data().geminiKey) || ''; } catch { geminiKey = ''; } }
+    return geminiKey || settings.geminiKey || '';
+  }
+  async function aiSort(raw) {
+    const key = (await getKey()).trim(); if (!key) throw new Error('nokey');
+    const lists = S.lists.map(l => ({ id: l.id, name: l.name, grocery: isGrocery(l) }));
+    const prompt = `Familjens inköpslistor: ${JSON.stringify(lists)}. Listan som är öppen nu: ${S.listId}.
+Skafferiet (finns hemma, köp inte): ${S.pantry.filter(p => !isGiven(p)).join(', ') || '–'}.
+Text som familjen skrev: «${raw}»
+
+Dela upp texten i varor att köpa och lägg varje vara på den lista som passar butikstypen (mat på mataffärslistan, verktyg och färg på bygghandel, mediciner och plåster på apotek, vin/öl/sprit på Systembolaget, hygien och hushåll på mataffärslistan om inget annat passar). Passar ingen lista: använd listan som är öppen.
+Nämns en maträtt (t.ex. "tacos fredag") lägger du in de varor man normalt behöver köpa till den rätten för en familj på fyra, med rättens namn i "recipe" (t.ex. "Tacos"). Hoppa över sådant som står i skafferiet och självklarheter som salt, peppar, socker, olja och mjöl. Dagar och andra ord som inte är varor ignoreras.
+Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelsebokstav ("Köttfärs", "Tandkräm"), och mängd bara om den angavs eller behövs för rätten ("500 g", "2 st").`;
+    const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.2,
+      responseSchema: { type: 'OBJECT', properties: { items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { text: { type: 'STRING' }, qty: { type: 'STRING' }, listId: { type: 'STRING' }, recipe: { type: 'STRING' } }, required: ['text', 'listId'] } } }, required: ['items'] } } });
+    let last = '';
+    for (const model of ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.6-flash']) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body });
+        if (!res.ok) { last = String(res.status); continue; }
+        const txt = ((await res.json()).candidates?.[0]?.content?.parts || []).filter(p => !p.thought && p.text).map(p => p.text).join('');
+        const items = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)).items;
+        if (Array.isArray(items) && items.length) return items.map(x => ({ text: String(x.text || '').trim(), qty: String(x.qty || '').trim(), listId: x.listId, recipe: String(x.recipe || '').trim() })).filter(x => x.text);
+        last = 'empty';
+      } catch (e) { last = e.message || String(e); }
+    }
+    throw new Error(last);
   }
   // Skafferivaror som handlas läggs i en kö som Souschefen tar in i skafferiet
   // Handlat försvinner från listan direkt (med Ångra en stund). Det som inte fanns ligger bara kvar.
@@ -140,9 +203,9 @@
     el.hidden = false; el.querySelector('button').onclick = () => { el.hidden = true; undo(); };
     undoBar._t = setTimeout(() => { el.hidden = true; }, 5000);
   }
-  // Handlade varor sparas en månad (för framtida "vanliga varor") och städas sedan bort
+  // Handlade varor sparas tre månader (för "vanliga varor") och städas sedan bort
   function purgeOld() {
-    const old = S.items.filter(i => i.done && i.listId !== '__pantry' && (i.doneAt || 0) < Date.now() - 30 * 864e5);
+    const old = S.items.filter(i => i.done && i.listId !== '__pantry' && (i.doneAt || 0) < Date.now() - 90 * 864e5);
     if (!old.length) return; const b = db.batch(); old.slice(0, 400).forEach(i => b.delete(fam('items').doc(i.id))); b.commit().catch(() => {});
   }
   function removeItem(id) { fam('items').doc(id).delete().catch(onErr); }
@@ -190,12 +253,16 @@
     lists.innerHTML = S.lists.map(l => `<button type="button" class="hl-list${l.id === S.listId ? ' on' : ''}" data-list="${esc(l.id)}" aria-pressed="${l.id === S.listId}">${esc(l.name)}${openCount(l.id) ? ` <span>${openCount(l.id)}</span>` : ''}</button>`).join('')
       + `<button type="button" class="hl-list hl-new" data-panel="new" aria-label="${L('Ny lista', 'New list')}">+</button>`;
     form.hidden = !cur;
+    if (!cur) $('#common').hidden = true;
 
     // Verktyg för listan
     const grocery = isGrocery(cur);
     if (!grocery && S.panel === 'pantry') S.panel = '';
     const pantry = S.pantry.filter(p => !isGiven(p));
+    const recipes = cur ? window.shopRecipes(S.items.filter(i => i.listId === cur.id && !i.done)) : [];
+    if (!recipes.length && S.panel === 'recipes') S.panel = '';
     let toolsHtml = cur ? `<div class="hl-tools">
+      ${recipes.length ? `<button type="button" class="ghost small" data-panel="recipes" aria-pressed="${S.panel === 'recipes'}">🍽 ${L('Recept', 'Recipes')} (${recipes.length})</button>` : ''}
       ${grocery ? `<button type="button" class="ghost small" data-panel="pantry" aria-pressed="${S.panel === 'pantry'}">🥫 ${L('Fyll på skafferiet', 'Restock pantry')}</button>` : ''}
       <button type="button" class="ghost small" data-panel="edit" aria-pressed="${S.panel === 'edit'}" aria-label="${L('Ändra listan', 'Edit list')}">⋯</button></div>` : '';
     if (S.panel === 'new') toolsHtml += `<div class="hl-panel"><form data-newlist><label for="newList">${L('Ny lista', 'New list')}</label>
@@ -210,7 +277,12 @@
       toolsHtml += `<div class="hl-panel"><p class="hint">${L('Tryck på det som är slut. Skafferiet ändrar du i Souschefen under Inställningar.', 'Tap what has run out. Edit the pantry in Souschefen under Settings.')}</p>
         ${pantry.length ? `<div class="chips">${pantry.map(p => `<button type="button" class="chip opt" data-pantry="${esc(p)}" aria-pressed="${onList.has(fold(p))}">${esc(p)}</button>`).join('')}</div>` : `<p class="muted">${L('Skafferiet är tomt.', 'The pantry is empty.')}</p>`}</div>`;
     }
+    if (S.panel === 'recipes' && cur) toolsHtml += `<div class="hl-panel"><p class="hint">${L('Stryk ett recept så försvinner bara dess del av mängden. Det som andra recept eller ni själva lagt till ligger kvar.', 'Remove a recipe and only its share of the amounts goes. What other recipes or you added stays.')}</p>
+        <ul class="hl-recipes">${recipes.map(x => `<li><span>${esc(x.name)} <small>${x.n} ${L(x.n === 1 ? 'vara' : 'varor', x.n === 1 ? 'item' : 'items')}</small></span><button type="button" class="ghost small danger" data-unrecipe="${esc(x.name)}">${L('Stryk', 'Remove')}</button></li>`).join('')}</ul></div>`;
     tools.innerHTML = toolsHtml;
+    const common = cur && !S.panel ? commonItems(cur) : [];
+    $('#common').innerHTML = common.length ? `<span class="hl-common-label">${L('Vanliga', 'Usual')}</span>${common.map(t => `<button type="button" class="chip" data-common="${esc(t)}">+ ${esc(t)}</button>`).join('')}` : '';
+    $('#common').hidden = !common.length;
 
     if (!cur) { main.innerHTML = S.listsLoaded ? `<p class="muted">${L('Skapa en lista med +.', 'Create a list with +.')}</p>` : `<p class="muted">${L('Laddar…', 'Loading…')}</p>`; return; }
     const mine = S.items.filter(i => i.listId === S.listId);
@@ -235,11 +307,23 @@
   }
 
   /* ---------- Händelser ---------- */
-  $('#addForm').addEventListener('submit', e => {
+  $('#addForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const inp = $('#addInput'), lines = inp.value.split(/[,\n;]/).map(x => x.trim()).filter(Boolean);
+    const inp = $('#addInput'), raw = inp.value.trim(), lines = raw.split(/[,\n;]/).map(x => x.trim()).filter(Boolean);
     if (!lines.length) return;
-    const n = addItems(lines); inp.value = ''; inp.focus();
+    inp.value = ''; inp.focus();
+    if (looksFree(raw) && navigator.onLine) {
+      toast(L('Sorterar…', 'Sorting…'), 20000);
+      try {
+        const items = await aiSort(raw), n = addItems(items), per = {};
+        items.forEach(x => { const l = S.lists.find(y => y.id === x.listId) || S.lists.find(y => y.id === S.listId); if (l) per[l.name] = (per[l.name] || 0) + 1; });
+        toast(L(`${n} ${n === 1 ? 'vara' : 'varor'}: `, `${n} ${n === 1 ? 'item' : 'items'}: `) + Object.entries(per).map(([k, v]) => `${v} ${L('i', 'in')} ${k}`).join(', '), 4500);
+        return;
+      } catch (err) {
+        toast(err.message === 'nokey' ? L('Ingen Gemini-nyckel – lade till som vanligt.', 'No Gemini key – added as usual.') : L('Kunde inte sortera – lade till som vanligt.', 'Could not sort – added as usual.'), 3500);
+      }
+    }
+    const n = addItems(lines);
     if (n > 1) toast(L(`${n} varor tillagda`, `${n} items added`));
   });
   document.addEventListener('submit', e => {
@@ -257,6 +341,8 @@
     const pa = t.closest('[data-pantry]'); if (pa) { if (pa.getAttribute('aria-pressed') !== 'true') { addItems([pa.dataset.pantry], { recipe: L('Skafferiet', 'Pantry'), stock: true }); } return; }
     const by = t.closest('[data-buy]'); if (by) { by.closest('.hl-item')?.classList.add('going'); setTimeout(() => buy(by.dataset.buy), 180); return; }
     const dl = t.closest('[data-del]'); if (dl) { removeItem(dl.dataset.del); return; }
+    const ur = t.closest('[data-unrecipe]'); if (ur) { removeRecipe(ur.dataset.unrecipe); return; }
+    const cm = t.closest('[data-common]'); if (cm) { addItems([cm.dataset.common]); toast(L(`${cm.dataset.common} tillagd`, `${cm.dataset.common} added`), 1500); return; }
   });
 
   init();
