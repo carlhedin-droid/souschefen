@@ -28,8 +28,8 @@ Statisk HTML/CSS/JS utan byggsteg, publicerad med GitHub Pages. Datan sparas i `
 
 Egen app på `/lista/` (t.ex. souschefen.pages.dev/lista/) med egen hemskärmsikon, samma Google-inloggning och familj som Souschefen.
 
-- **Från receptet:** "Till inköpslistan" under ingredienserna. Det som finns i skafferiet hamnar under "Har ni troligen hemma" (inte förbockat). Mängder följer valda portioner och dubbletter slås ihop.
-- **Listor:** flera listor (Mat, Bygghandel, Apotek …), snabbinmatning ("mjölk, ägg, 2 avokado"), bocka av i realtid för hela familjen, "I korgen" och Rensa.
+- **Från receptet:** "Till inköpslistan" under ingredienserna. Det som finns i skafferiet hamnar under "Har ni troligen hemma" (inte förbockat). Mängder följer valda portioner och dubbletter slås ihop och summeras (200 g + 300 g = 500 g, 1 dl + 2 msk = 1,3 dl).
+- **Listor:** flera listor (Mat, Bygghandel, Apotek …), snabbinmatning ("mjölk, ägg, 2 avokado"), bocka av i realtid för hela familjen. Det som handlas försvinner direkt (Ångra i fem sekunder); det som inte fanns ligger kvar. Mataffärslistor sorteras i en fast butiksordning med frysvaror sist. Skärmen hålls tänd medan listan är öppen.
 - **Skafferiet:** sparas i Souschefens inställningar. Souschefen kan föreslå basvaror utifrån favoritländerna, märker skafferivaror i recepten, och i inköpslistan fyller man på det som är slut.
 - **Utan täckning:** appen och listan öppnas offline; ändringar skickas när nätet är tillbaka.
 - **Data:** `families/{fid}/lists` och `families/{fid}/items` i Firestore (täcks av befintliga regler).

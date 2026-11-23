@@ -39,14 +39,14 @@ body.hl-body { overflow: auto; height: auto; min-height: 100%; }
 .hl-main > .hl-items:first-child { margin-top: 4px; }
 .hl-item { display: flex; align-items: stretch; }
 .hl-item + .hl-item { border-top: 1px solid var(--line); }
-.hl-check { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; border: 0; background: none; padding: 12px 6px 12px 14px; text-align: left; min-height: 54px; }
-.hl-check .box { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--muted); display: grid; place-items: center; }
+.hl-check { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; border: 0; background: none; padding: 14px 6px 14px 16px; text-align: left; min-height: 62px; }
+.hl-check .box { flex: none; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--muted); display: grid; place-items: center; }
 .hl-check[aria-pressed="true"] .box { background: var(--pandan); border-color: var(--pandan); }
 .hl-check[aria-pressed="true"] .box::after { content: ""; width: 10px; height: 6px; border-left: 2.5px solid var(--pandan-ink); border-bottom: 2.5px solid var(--pandan-ink); transform: rotate(-45deg) translate(1px, -1px); }
-.hl-check .txt { flex: 1; min-width: 0; font-size: 17.5px; overflow-wrap: anywhere; }
+.hl-check .txt { flex: 1; min-width: 0; font-size: 18.5px; overflow-wrap: anywhere; }
 .hl-check .qty { flex: none; color: var(--muted); font-size: 15px; max-width: 45%; text-align: right; }
 .hl-item.done .txt { text-decoration: line-through; color: var(--muted); }
-.hl-del { flex: none; width: 46px; border: 0; background: none; color: var(--muted); font-size: 22px; }
+.hl-del { flex: none; width: 52px; border: 0; background: none; color: var(--muted); font-size: 22px; }
 .hl-del:hover { color: var(--sambal); }
 .hl-check:focus-visible, .hl-del:focus-visible, .hl-list:focus-visible { outline: 2px solid var(--pandan); outline-offset: -2px; }
 
@@ -64,3 +64,13 @@ body.hl-body { overflow: auto; height: auto; min-height: 100%; }
 .hl-check .src { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; text-decoration: none; }
 .hl-kind { display: flex !important; align-items: center; gap: 8px; font-weight: 600 !important; margin-top: 12px; font-size: 15px; }
 .hl-kind input { width: 20px; height: 20px; accent-color: var(--pandan); }
+
+/* Handlat: bocken fylls och raden glider bort */
+.hl-item.going .box { background: var(--pandan); border-color: var(--pandan); }
+.hl-item.going { opacity: .35; transition: opacity .18s ease; }
+.hl-undo { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 21;
+  display: flex; align-items: center; gap: 14px; background: var(--ink); color: var(--bg); padding: 8px 8px 8px 18px; border-radius: 999px;
+  font-weight: 700; max-width: calc(100vw - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.18); }
+.hl-undo[hidden] { display: none; }
+.hl-undo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hl-undo button { flex: none; border: 0; border-radius: 999px; background: var(--bg); color: var(--ink); font-weight: 700; padding: 8px 16px; min-height: 40px; }

@@ -17,7 +17,7 @@
   function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms); }
 
   const S = { user: undefined, fid: null, lists: [], items: [], pantry: [], listId: lsGet('hl.list') || '', ready: false, err: '',
-    panel: '', showDone: false, listsLoaded: false };
+    panel: '', listsLoaded: false };
   let db, auth, unsubs = [];
 
   // Statiska texter
@@ -31,6 +31,7 @@
   /* ---------- Start ---------- */
   const loadScript = src => new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error(src)); document.head.appendChild(s); });
   async function init() {
+    keepAwake();
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
     updateOnline();
     try { for (const f of ['app', 'auth', 'firestore']) await loadScript(`${SDK}firebase-${f}-compat.js`); }
@@ -60,7 +61,7 @@
       if (!S.lists.some(l => l.id === S.listId)) S.listId = S.lists[0]?.id || '';
       S.listsLoaded = true; S.ready = true; render();
     }, onErr));
-    unsubs.push(f.collection('items').onSnapshot(q => { S.items = q.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, onErr));
+    unsubs.push(f.collection('items').onSnapshot(q => { S.items = q.docs.map(d => ({ id: d.id, ...d.data() })); if (!q.metadata.fromCache && !purgeOld.done) { purgeOld.done = true; purgeOld(); } render(); }, onErr));
     unsubs.push(f.collection('state').doc('core').onSnapshot(d => { S.pantry = (d.exists && Array.isArray(d.data().prefs?.pantry)) ? d.data().prefs.pantry : []; if (S.panel === 'pantry') render(); }, () => {}));
   }
   function onErr(e) { console.warn('Firestore', e); S.err = e.message || String(e); render(); }
@@ -72,13 +73,13 @@
   // Självklarheter visas aldrig i skafferiet (samma lista som i Souschefen)
   const GIVEN_RE = /^((nymalen|nymald|grovmalen|grovmald|finmalen|finmald|flytande|osaltat|normalsaltat) )?(salt|flingsalt|havssalt|bordssalt|peppar|svartpeppar|vitpeppar|socker|strosocker|vetemjol|mjol|olja|neutral olja|rapsolja|matolja|solrosolja|olivolja|smor|margarin|buljong|buljongtarning|buljongtarningar|kycklingbuljong|honsbuljong|gronsaksbuljong|kalvbuljong|kottbuljong|fond|soja|japansk soja|sojasas|vinager|attika|vitvinsvinager|vatten|kranvatten|isvatten|is|kokande vatten|ljummet vatten|varmt vatten|kallt vatten|salt och peppar)( (till|for|att|efter|eller|och)\b.*)?$/;
   const isGiven = x => GIVEN_RE.test(fold(x).replace(/\(.*?\)/g, '').replace(/,.*$/, '').trim());
-  // Avdelningar i ungefär den ordning man går i en svensk butik. Regler prövas i PRIO-ordning (mest specifika först).
+  // Fast standardordning för alla butiker: ungefär som man går i en svensk mataffär, frysvaror sist så att de håller sig kalla. Regler prövas i PRIO-ordning (mest specifika först).
   const DEPTS = [
     ['frukt', '🥬', 'Frukt & grönt', 'Fruit & veg'], ['brod', '🍞', 'Bröd', 'Bread'], ['kott', '🥩', 'Kött, fågel & chark', 'Meat & deli'],
     ['fisk', '🐟', 'Fisk & skaldjur', 'Fish & seafood'], ['mejeri', '🥛', 'Mejeri & ägg', 'Dairy & eggs'], ['ost', '🧀', 'Ost', 'Cheese'],
     ['torr', '🍝', 'Pasta, ris & bakning', 'Pasta, rice & baking'], ['krydd', '🧂', 'Kryddor, såser & oljor', 'Spices, sauces & oils'],
-    ['konserv', '🥫', 'Konserver & världens mat', 'Tins & world foods'], ['fryst', '❄️', 'Fryst', 'Frozen'], ['dryck', '🥤', 'Dryck', 'Drinks'],
-    ['snacks', '🍫', 'Snacks & godis', 'Snacks & sweets'], ['hushall', '🧻', 'Hushåll & hygien', 'Household'], ['ovrigt', '🛒', 'Övrigt', 'Other']];
+    ['konserv', '🥫', 'Konserver & världens mat', 'Tins & world foods'], ['dryck', '🥤', 'Dryck', 'Drinks'],
+    ['snacks', '🍫', 'Snacks & godis', 'Snacks & sweets'], ['hushall', '🧻', 'Hushåll & hygien', 'Household'], ['fryst', '❄️', 'Fryst', 'Frozen'], ['ovrigt', '🛒', 'Övrigt', 'Other']];
   const RULES = [
     ['fryst', /\b(fryst|frysta|djupfryst|frozen)\b|glass\b|ice cream|fryspizza|pommes/],
     ['hushall', /toalettpapper|toapapper|hushallspapper|bakplatspapper|kokspapper|diskmedel|disktabletter|tvattmedel|skoljmedel|\btval|schampo|balsam\b|tandkram|tandborst|tandtrad|(?<!te)pas(e|ar)\b|plastfolie|aluminiumfolie|folie\b|blojor|servett|batteri|deodorant|rengoring|wettex|disktrasa|stearin|bomullspinn|detergent|soap|shampoo|toilet|napkin/],
@@ -114,7 +115,7 @@
     let n = 0;
     lines.map(parseLine).filter(x => x.text).forEach((x, k) => {
       const ex = open[fold(x.text)];
-      if (ex) { if (x.qty) batch.update(fam('items').doc(ex.id), { qty: [ex.qty, x.qty].filter(Boolean).join(' + '), updatedAt: t0 }); }
+      if (ex) { if (x.qty) { const qty = window.mergeQty(ex.qty, x.qty); batch.update(fam('items').doc(ex.id), { qty, updatedAt: t0 }); ex.qty = qty; } }
       else { const ref = fam('items').doc(); batch.set(ref, { listId: S.listId, text: x.text, qty: x.qty, recipe: extra.recipe || '', done: false, addedAt: t0 + k, addedBy: who, ...(extra.stock ? { stock: true } : {}) }); open[fold(x.text)] = { id: ref.id, ...x }; }
       n++;
     });
@@ -122,16 +123,30 @@
     return n;
   }
   // Skafferivaror som handlas läggs i en kö som Souschefen tar in i skafferiet
-  function toggle(id) {
-    const i = S.items.find(x => x.id === id); if (!i) return;
-    const b = db.batch();
-    b.update(fam('items').doc(id), { done: !i.done, doneAt: Date.now() });
-    if (!i.done && i.stock) b.set(fam('items').doc(), { listId: '__pantry', text: i.text, done: false, addedAt: Date.now() });
+  // Handlat försvinner från listan direkt (med Ångra en stund). Det som inte fanns ligger bara kvar.
+  function buy(id) {
+    const i = S.items.find(x => x.id === id); if (!i || i.done) return;
+    const b = db.batch(), q = i.stock ? fam('items').doc() : null;
+    b.update(fam('items').doc(id), { done: true, doneAt: Date.now() });
+    if (q) b.set(q, { listId: '__pantry', text: i.text, done: false, addedAt: Date.now() });
     b.commit().catch(onErr);
+    undoBar(L(`${i.text} handlad`, `${i.text} bought`), () => {
+      const u = db.batch(); u.update(fam('items').doc(id), { done: false, doneAt: null }); if (q) u.delete(q); u.commit().catch(onErr);
+    });
+  }
+  function undoBar(msg, undo) {
+    const el = $('#undo'); clearTimeout(undoBar._t);
+    el.innerHTML = `<span>${esc(msg)}</span><button type="button">${L('Ångra', 'Undo')}</button>`;
+    el.hidden = false; el.querySelector('button').onclick = () => { el.hidden = true; undo(); };
+    undoBar._t = setTimeout(() => { el.hidden = true; }, 5000);
+  }
+  // Handlade varor sparas en månad (för framtida "vanliga varor") och städas sedan bort
+  function purgeOld() {
+    const old = S.items.filter(i => i.done && i.listId !== '__pantry' && (i.doneAt || 0) < Date.now() - 30 * 864e5);
+    if (!old.length) return; const b = db.batch(); old.slice(0, 400).forEach(i => b.delete(fam('items').doc(i.id))); b.commit().catch(() => {});
   }
   function removeItem(id) { fam('items').doc(id).delete().catch(onErr); }
-  function clearDone() { const b = db.batch(); S.items.filter(i => i.listId === S.listId && i.done).forEach(i => b.delete(fam('items').doc(i.id))); b.commit().catch(onErr); }
-  function deleteList(id) {
+    function deleteList(id) {
     const l = S.lists.find(x => x.id === id); if (!l) return;
     if (!confirm(L(`Ta bort listan "${l.name}" och allt på den?`, `Delete the list "${l.name}" and everything on it?`))) return;
     const b = db.batch(); S.items.filter(i => i.listId === id).forEach(i => b.delete(fam('items').doc(i.id))); b.delete(fam('lists').doc(id));
@@ -139,6 +154,15 @@
   }
   function setKind(id, grocery) { fam('lists').doc(id).update({ kind: grocery ? 'grocery' : 'other' }).catch(onErr); }
   function renameList(id, name) { if (name.trim()) fam('lists').doc(id).update({ name: name.trim() }).catch(onErr); S.panel = ''; render(); }
+
+  /* ---------- Skärmen tänd i butiken ---------- */
+  let lock = null;
+  async function keepAwake() {
+    if (!('wakeLock' in navigator) || document.visibilityState !== 'visible' || lock) return;
+    try { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } catch { /* t.ex. strömsparläge */ }
+  }
+  document.addEventListener('visibilitychange', keepAwake);
+  document.addEventListener('pointerdown', keepAwake, { passive: true });   // vissa webbläsare kräver en tryckning först
 
   /* ---------- Visning ---------- */
   function updateOnline() { const el = $('#offline'); el.hidden = navigator.onLine; el.textContent = L('Ingen täckning – ändringarna sparas och skickas när du är online igen.', 'Offline – changes are saved and sent when you are back online.'); }
@@ -191,7 +215,7 @@
     if (!cur) { main.innerHTML = S.listsLoaded ? `<p class="muted">${L('Skapa en lista med +.', 'Create a list with +.')}</p>` : `<p class="muted">${L('Laddar…', 'Loading…')}</p>`; return; }
     const mine = S.items.filter(i => i.listId === S.listId);
     const open = mine.filter(i => !i.done).sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
-    const done = mine.filter(i => i.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
+    const boughtToday = mine.some(i => i.done && (i.doneAt || 0) > Date.now() - 6 * 36e5);
     const groups = []; const by = {};
     if (grocery) {   // mataffär: per avdelning, i butiksordning
       open.forEach(i => { const k = deptOf(i.text); if (!by[k]) groups.push(by[k] = { dept: k, items: [] }); by[k].items.push(i); });
@@ -202,13 +226,11 @@
       open.forEach(i => { const k = i.recipe || ''; if (!by[k]) groups.push(by[k] = { name: k ? `${L('Från', 'From')} ${k}` : '', items: [] }); by[k].items.push(i); });
       groups.sort((a, b) => (a.name ? 1 : 0) - (b.name ? 1 : 0));
     }
-    const row = i => `<li class="hl-item${i.done ? ' done' : ''}">
-        <button type="button" class="hl-check" data-toggle="${esc(i.id)}" aria-pressed="${!!i.done}"><span class="box" aria-hidden="true"></span><span class="txt">${esc(i.text)}${grocery && i.recipe && !i.done ? `<small class="src">${esc(i.recipe)}</small>` : ''}</span>${i.qty ? `<span class="qty">${esc(i.qty)}</span>` : ''}</button>
+    const row = i => `<li class="hl-item">
+        <button type="button" class="hl-check" data-buy="${esc(i.id)}" aria-label="${L(`${esc(i.text)} – handlad`, `${esc(i.text)} – bought`)}"><span class="box" aria-hidden="true"></span><span class="txt">${esc(i.text)}${grocery && i.recipe ? `<small class="src">${esc(i.recipe)}</small>` : ''}</span>${i.qty ? `<span class="qty">${esc(i.qty)}</span>` : ''}</button>
         <button type="button" class="hl-del" data-del="${esc(i.id)}" aria-label="${L(`Ta bort ${esc(i.text)}`, `Remove ${esc(i.text)}`)}">×</button></li>`;
     main.innerHTML = (open.length ? groups.map(g => `${g.name ? `<h2 class="hl-group">${esc(g.name)}</h2>` : ''}<ul class="hl-items">${g.items.map(row).join('')}</ul>`).join('')
-        : `<div class="hl-empty small"><p>${done.length ? L('Allt är handlat 🎉', 'All done 🎉') : L('Listan är tom. Skriv ovan, eller tryck på "Till inköpslistan" i ett recept i Souschefen.', 'The list is empty. Type above, or tap "To shopping list" on a recipe in Souschefen.')}</p></div>`)
-      + (done.length ? `<div class="hl-done"><div class="hl-done-head"><button type="button" class="hl-done-toggle" data-showdone aria-expanded="${S.showDone}">${L('I korgen', 'In the basket')} (${done.length})</button>
-          <button type="button" class="ghost small" data-cleardone>${L('Rensa', 'Clear')}</button></div>${S.showDone ? `<ul class="hl-items">${done.map(row).join('')}</ul>` : ''}</div>` : '')
+        : `<div class="hl-empty small"><p>${boughtToday ? L('Allt är handlat 🎉', 'All done 🎉') : L('Listan är tom. Skriv ovan, eller tryck på "Till inköpslistan" i ett recept i Souschefen.', 'The list is empty. Type above, or tap "To shopping list" on a recipe in Souschefen.')}</p></div>`)
       + (S.err ? `<p class="hl-err">${esc(S.err)}</p>` : '');
   }
 
@@ -233,10 +255,8 @@
     if (t.closest('[data-dellist]')) { deleteList(S.listId); return; }
     const kd = t.closest('[data-kind]'); if (kd) { setKind(S.listId, kd.checked); return; }
     const pa = t.closest('[data-pantry]'); if (pa) { if (pa.getAttribute('aria-pressed') !== 'true') { addItems([pa.dataset.pantry], { recipe: L('Skafferiet', 'Pantry'), stock: true }); } return; }
-    const tg = t.closest('[data-toggle]'); if (tg) { toggle(tg.dataset.toggle); return; }
+    const by = t.closest('[data-buy]'); if (by) { by.closest('.hl-item')?.classList.add('going'); setTimeout(() => buy(by.dataset.buy), 180); return; }
     const dl = t.closest('[data-del]'); if (dl) { removeItem(dl.dataset.del); return; }
-    if (t.closest('[data-showdone]')) { S.showDone = !S.showDone; render(); return; }
-    if (t.closest('[data-cleardone]')) { clearDone(); return; }
   });
 
   init();

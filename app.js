@@ -2053,7 +2053,7 @@ async function addToShop() {
     let merged = 0;
     rows.forEach((x, k) => {
       const ex = existing[fold(x.name)];
-      if (ex) { merged++; batch.update(ex.ref, { qty: [ex.qty, x.qty].filter(Boolean).join(' + '), recipe: ex.recipe && ex.recipe !== r.title ? `${ex.recipe}, ${r.title}` : r.title, updatedAt: now0 }); }
+      if (ex) { merged++; batch.update(ex.ref, { qty: window.mergeQty(ex.qty, x.qty), recipe: ex.recipe && ex.recipe !== r.title ? `${ex.recipe}, ${r.title}` : r.title, updatedAt: now0 }); }
       else batch.set(col.doc(), { listId: sh.listId, text: x.name, qty: x.qty || '', recipe: r.title, done: false, addedAt: now0 + k, addedBy: who, ...(x.stock && !isGiven(x.name) ? { stock: true } : {}) });
     });
     await batch.commit();
