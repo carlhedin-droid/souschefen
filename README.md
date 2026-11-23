@@ -33,7 +33,7 @@ Egen app på `/lista/` (t.ex. souschefen.pages.dev/lista/) med egen hemskärmsik
 - **Vanliga varor:** snabbknappar under inmatningen, lärda från det ni handlat de senaste tre månaderna, med en startlista (mjölk, bröd, ägg …) tills historiken räcker.
 - **Stryk ett recept:** knappen Recept i listan. Varje vara minns hur mycket som kom från vilket recept, så bara receptets del av mängden försvinner (Ångra finns).
 - **Fritext:** skriv t.ex. "tacos fredag + kaffe och tandkräm" så delar Gemini upp det i varor på rätt listor och lägger in det som behövs till rätten (utom det som finns i skafferiet). Vanliga rader ("mjölk, 2 avokado") läggs till direkt utan AI.
-- **Skafferiet:** sparas i Souschefens inställningar. Souschefen kan föreslå basvaror utifrån favoritländerna, märker skafferivaror i recepten, och i inköpslistan fyller man på det som är slut.
+- **Skafferiet:** sparas i Souschefens inställningar. Souschefen kan föreslå basvaror utifrån favoritländerna, märker skafferivaror i recepten, och i inköpslistan fyller man på det som är slut under "Vad är slut?" – samma skafferi och samma grupper som Souschefens checklista, med sökning när skafferiet är stort.
 - **Utan täckning:** appen och listan öppnas offline; ändringar skickas när nätet är tillbaka.
 - **Data:** `families/{fid}/lists` och `families/{fid}/items` i Firestore (täcks av befintliga regler).
 

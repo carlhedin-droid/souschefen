@@ -17,7 +17,7 @@
   function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms); }
 
   const S = { user: undefined, fid: null, lists: [], items: [], pantry: [], listId: lsGet('hl.list') || '', ready: false, err: '',
-    panel: '', listsLoaded: false };
+    panel: '', listsLoaded: false, catalog: [], pq: '' };
   let db, auth, unsubs = [];
 
   // Statiska texter
@@ -62,7 +62,7 @@
       S.listsLoaded = true; S.ready = true; render();
     }, onErr));
     unsubs.push(f.collection('items').onSnapshot(q => { S.items = q.docs.map(d => ({ id: d.id, ...d.data() })); if (!q.metadata.fromCache && !purgeOld.done) { purgeOld.done = true; purgeOld(); } render(); }, onErr));
-    unsubs.push(f.collection('state').doc('core').onSnapshot(d => { S.pantry = (d.exists && Array.isArray(d.data().prefs?.pantry)) ? d.data().prefs.pantry : []; if (S.panel === 'pantry') render(); }, () => {}));
+    unsubs.push(f.collection('state').doc('core').onSnapshot(d => { const P = d.exists ? d.data().prefs || {} : {}; S.pantry = Array.isArray(P.pantry) ? P.pantry : []; S.catalog = Array.isArray(P.pantryCatalog) ? P.pantryCatalog : []; if (S.panel === 'pantry') render(); }, () => {}));
   }
   function onErr(e) { console.warn('Firestore', e); S.err = e.message || String(e); render(); }
   const fam = n => db.collection('families').doc(S.fid).collection(n);
@@ -218,6 +218,30 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
   function setKind(id, grocery) { fam('lists').doc(id).update({ kind: grocery ? 'grocery' : 'other' }).catch(onErr); }
   function renameList(id, name) { if (name.trim()) fam('lists').doc(id).update({ name: name.trim() }).catch(onErr); S.panel = ''; render(); }
 
+  /* ---------- Skafferiet i samma grupper som Souschefens checklista ---------- */
+  function pantryGroups(pantry) {
+    const byName = new Map(), order = [];
+    S.catalog.forEach(g => { const name = String(g.group || '').trim(); if (!name) return; order.push(name); (g.items || []).forEach(x => { if (!byName.has(fold(x))) byName.set(fold(x), name); }); });
+    const deptName = k => { const d = DEPTS.find(x => x[0] === k); return L(d[2], d[3]); };
+    const out = new Map();
+    pantry.forEach(p => { const g = byName.get(fold(p)) || (S.catalog.length ? L('Övrigt', 'Other') : deptName(deptOf(p))); if (!out.has(g)) out.set(g, []); out.get(g).push(p); });
+    const rank = g => { const i = order.indexOf(g); if (i >= 0) return i; const d = DEPTS.findIndex(x => L(x[2], x[3]) === g); return d >= 0 ? 100 + d : 999; };
+    return [...out].map(([group, items]) => ({ group, items: items.sort((a, b) => a.localeCompare(b, 'sv')) })).sort((a, b) => rank(a.group) - rank(b.group));
+  }
+  function filterPantry() {
+    const q = fold(S.pq); let any = false;
+    document.querySelectorAll('.hl-pg').forEach(sec => { let vis = 0; sec.querySelectorAll('[data-pantry]').forEach(b => { const ok = !q || b.dataset.q.includes(q); b.hidden = !ok; if (ok) vis++; }); sec.hidden = !vis; if (vis) any = true; });
+    const none = document.querySelector('.hl-pnone'); if (none) none.hidden = any || !q;
+  }
+  // Tryck igen: ta bort skafferiets del från listan (det som lagts till på annat sätt ligger kvar)
+  function pantryToggleItem(text) {
+    const i = S.items.find(x => x.listId === S.listId && !x.done && fold(x.text) === fold(text));
+    if (!i) { addItems([text], { recipe: L('Skafferiet', 'Pantry'), stock: true }); return; }
+    const res = window.shopRemoveRecipe(i, L('Skafferiet', 'Pantry'));
+    if (res === undefined) { toast(L('Står redan på listan', 'Already on the list'), 1800); return; }
+    if (res === null) removeItem(i.id); else fam('items').doc(i.id).update({ ...res, updatedAt: Date.now() }).catch(onErr);
+  }
+
   /* ---------- Skärmen tänd i butiken ---------- */
   let lock = null;
   async function keepAwake() {
@@ -234,7 +258,6 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
   const PRESETS = () => [L('Mat', 'Groceries'), L('Bygghandel', 'Hardware store'), L('Apotek', 'Pharmacy'), L('Köpcentrum', 'Shopping centre'), L('Systembolaget', 'Systembolaget')];
   function render() {
     const main = $('#main'), form = $('#addForm'), lists = $('#lists'), tools = $('#listTools');
-    $('#toChef').textContent = L('← Souschefen', '← Souschefen');
     if (!S.ready) return;
     if (S.user === null) {
       form.hidden = true; lists.innerHTML = ''; tools.innerHTML = '';
@@ -274,12 +297,23 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
         <div class="hl-row" style="margin-top:10px"><button type="button" class="ghost small danger" data-dellist>${L('Ta bort listan', 'Delete list')}</button></div></div>`;
     if (S.panel === 'pantry' && cur) {
       const onList = new Set(S.items.filter(i => i.listId === S.listId && !i.done).map(i => fold(i.text)));
-      toolsHtml += `<div class="hl-panel"><p class="hint">${L('Tryck på det som är slut. Skafferiet ändrar du i Souschefen under Inställningar.', 'Tap what has run out. Edit the pantry in Souschefen under Settings.')}</p>
-        ${pantry.length ? `<div class="chips">${pantry.map(p => `<button type="button" class="chip opt" data-pantry="${esc(p)}" aria-pressed="${onList.has(fold(p))}">${esc(p)}</button>`).join('')}</div>` : `<p class="muted">${L('Skafferiet är tomt.', 'The pantry is empty.')}</p>`}</div>`;
+      const groups = pantryGroups(pantry), nOn = pantry.filter(p => onList.has(fold(p))).length;
+      toolsHtml += `<div class="hl-panel hl-pantry">
+        <div class="hl-pantry-head"><div><strong>${L('Vad är slut?', 'What has run out?')}</strong>
+          <p class="hint">${L('Tryck på det som ska köpas – tryck igen för att ångra. Samma skafferi som i Souschefen, i samma grupper.', 'Tap what needs buying – tap again to undo. Same pantry as in Souschefen, in the same groups.')}</p></div>
+          <button type="button" class="btn small" data-panel="pantry">${L('Klar', 'Done')}${nOn ? ` (${nOn})` : ''}</button></div>
+        ${pantry.length > 12 ? `<input type="search" id="pantrySearch" class="hl-psearch" placeholder="${L('Sök i skafferiet', 'Search the pantry')}" value="${esc(S.pq)}" autocomplete="off">` : ''}
+        ${pantry.length ? groups.map(g => { const n = g.items.filter(p => onList.has(fold(p))).length; return `<section class="hl-pg">
+          <h3>${esc(g.group)}${n ? ` <span>${n} ${L('på listan', 'on the list')}</span>` : ''}</h3>
+          <div class="hl-pgrid">${g.items.map(p => `<button type="button" class="hl-pitem" data-pantry="${esc(p)}" data-q="${esc(fold(p))}" aria-pressed="${onList.has(fold(p))}">${esc(p)}</button>`).join('')}</div></section>`; }).join('')
+          : `<p class="muted">${L('Skafferiet är tomt. Fyll i det i Souschefen under Inställningar → Skafferiet.', 'The pantry is empty. Fill it in Souschefen under Settings → Pantry.')}</p>`}
+        <p class="muted hl-pnone" hidden>${L('Inget i skafferiet matchar.', 'Nothing in the pantry matches.')}</p></div>`;
     }
     if (S.panel === 'recipes' && cur) toolsHtml += `<div class="hl-panel"><p class="hint">${L('Stryk ett recept så försvinner bara dess del av mängden. Det som andra recept eller ni själva lagt till ligger kvar.', 'Remove a recipe and only its share of the amounts goes. What other recipes or you added stays.')}</p>
         <ul class="hl-recipes">${recipes.map(x => `<li><span>${esc(x.name)} <small>${x.n} ${L(x.n === 1 ? 'vara' : 'varor', x.n === 1 ? 'item' : 'items')}</small></span><button type="button" class="ghost small danger" data-unrecipe="${esc(x.name)}">${L('Stryk', 'Remove')}</button></li>`).join('')}</ul></div>`;
+    const refocus = document.activeElement?.id === 'pantrySearch';
     tools.innerHTML = toolsHtml;
+    if (S.panel === 'pantry') { filterPantry(); if (refocus) { const el = $('#pantrySearch'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); } } else S.pq = '';
     const common = cur && !S.panel ? commonItems(cur) : [];
     $('#common').innerHTML = common.length ? `<span class="hl-common-label">${L('Vanliga', 'Usual')}</span>${common.map(t => `<button type="button" class="chip" data-common="${esc(t)}">+ ${esc(t)}</button>`).join('')}` : '';
     $('#common').hidden = !common.length;
@@ -326,6 +360,7 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
     const n = addItems(lines);
     if (n > 1) toast(L(`${n} varor tillagda`, `${n} items added`));
   });
+  document.addEventListener('input', e => { if (e.target.id === 'pantrySearch') { S.pq = e.target.value; filterPantry(); } });
   document.addEventListener('submit', e => {
     if (e.target.matches('[data-newlist]')) { e.preventDefault(); const v = $('#newList').value.trim(); if (v) { S.panel = ''; createList(v); render(); } }
     if (e.target.matches('[data-rename]')) { e.preventDefault(); renameList(S.listId, $('#renameList').value); }
@@ -338,7 +373,7 @@ Skriv varunamn kort på ${EN ? 'engelska' : 'svenska'} med stor begynnelseboksta
     const pr = t.closest('[data-preset]'); if (pr) { S.panel = ''; createList(pr.dataset.preset); render(); return; }
     if (t.closest('[data-dellist]')) { deleteList(S.listId); return; }
     const kd = t.closest('[data-kind]'); if (kd) { setKind(S.listId, kd.checked); return; }
-    const pa = t.closest('[data-pantry]'); if (pa) { if (pa.getAttribute('aria-pressed') !== 'true') { addItems([pa.dataset.pantry], { recipe: L('Skafferiet', 'Pantry'), stock: true }); } return; }
+    const pa = t.closest('[data-pantry]'); if (pa) { pantryToggleItem(pa.dataset.pantry); return; }
     const by = t.closest('[data-buy]'); if (by) { by.closest('.hl-item')?.classList.add('going'); setTimeout(() => buy(by.dataset.buy), 180); return; }
     const dl = t.closest('[data-del]'); if (dl) { removeItem(dl.dataset.del); return; }
     const ur = t.closest('[data-unrecipe]'); if (ur) { removeRecipe(ur.dataset.unrecipe); return; }
