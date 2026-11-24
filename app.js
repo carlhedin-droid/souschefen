@@ -868,7 +868,6 @@ function prefsText(d) {
 - Standardutrustning (finns alltid): ${STANDARD_KITCHEN}
 - Specialutrustning vi har: ${equip.join(', ') || 'ingen utöver standard'}${breadText(P)}
 - Självklarheter (finns alltid, räkna inte som inköp): ${GIVENS.join(', ')}
-- Förebilder ${d.weekend ? 'på HELG' : 'på VARDAG'}: ${(() => { const l = refList(P, d.weekend ? 'refWeekend' : 'refWeekday'); return l.length ? `${l.join(', ')} – skriv recepten enligt deras metoder, nivå och smaksättning${d.weekend ? '' : ' och håll vardagens omfattning och tidsram'}. Påstå aldrig att ett recept kommer från dem.` : 'inga särskilda'; })()}
 - Skafferiet (det vi har hemma just nu, både basvaror och skafferivaror – använd fritt och räkna inte som inköp): ${pantryOf(P).join(', ') || '(tomt)'}
 - ${d.weekend ? 'Skafferi på HELG: använd fritt det rätten behöver för bästa resultat. Det som inte finns i skafferiet köper vi – sätt "pantry": false på det.' : 'Skafferi på VARDAG: bygg rätten på skafferiet plus vanliga färskvaror som finns i alla butiker (kött, fisk, kyckling, grönsaker, mejeri). Högst EN skafferivara (sås, krydda, konserv, torrvara) som inte finns i skafferiet – och ge då ett alternativ i ingrediensens "note". Gäller även förslagen.'}
 - Dryckestips (bara när vi ber om dem): Pris per flaska: ${(() => { const a = kr(P.drinkPriceFrom), b = kr(P.drinkPriceTo); return a && b ? `${Math.min(a, b)}–${Math.max(a, b)} kr` : b ? `upp till ${b} kr` : a ? `från ${a} kr` : 'valfritt' })()}${P.drinkNA ? '. Ge alltid ett alkoholfritt alternativ' : ''}${drinkArr(P, 'drinkLike').length ? `. Vi dricker helst: ${P.drinkLike.join(', ')} – lägg dem först och föreslå bara annat när maten verkligen kräver det (säg då varför)` : ''}${(P.drinkLikes || '').trim() ? `. Vi gillar: ${P.drinkLikes.trim()}` : ''}${(P.drinkAvoid || '').trim() ? `. Vi undviker: ${P.drinkAvoid.trim()}` : ''}${drinkArr(P, 'drinkRange').length ? `. Vi handlar gärna i: ${P.drinkRange.join(', ')}` : ''}`;
@@ -1753,7 +1752,7 @@ function viewRecipe() {
 }
 // Jämför med förebilderna: sök rättens namn hos sajterna (Google-sökning begränsad till sajten)
 function refLinks(r) {
-  const P = S.data.prefs, list = refList(P, String(r.tag).toUpperCase() === 'HELG' ? 'refWeekend' : 'refWeekday');
+  const list = REF_DEFAULTS[String(r.tag).toUpperCase() === 'HELG' ? 'refWeekend' : 'refWeekday'];
   if (!list.length || !r.title) return '';
   const sv = r.title.replace(/\(.*?\)/g, '').trim(), en = (r.titleEn || '').trim() || sv;
   const url = n => { const d = refDomain(n), q = /\.se(\/|$)/.test(d) ? sv : en; return `https://www.google.com/search?q=${encodeURIComponent((d ? `site:${d} ` : `${n} `) + q)}`; };
@@ -2528,7 +2527,6 @@ function secSummary(key) {
     case 'equipment': return list([...P.equipment, ...P.customEquipment], L('Vanligt kök', 'Regular kitchen'));
     case 'pantry': { const n = pantryOf(P).length; return n ? L(`${n} basvaror`, `${n} staples`) : L('Tomt', 'Empty'); }
     case 'voice': return voiceMode() === 'ai' ? L(`Googles AI-röst, ${tv(TTS_VOICES.find(v => v[0] === aiVoice())[1]).toLowerCase()}`, `Google AI voice, ${EN_VOICE_DESC[TTS_VOICES.find(v => v[0] === aiVoice())[1]].toLowerCase()}`) : L('Enhetens röst', 'Device voice') + (S.settings.deviceVoice ? `, ${S.settings.deviceVoice}` : '');
-    case 'refs': return `${L('Vardag', 'Weekdays')}: ${refList(P, 'refWeekday').length || 0}, ${L('helg', 'weekends')}: ${refList(P, 'refWeekend').length || 0}`;
     case 'drinks': return priceText(P).replace(/^./, c => c.toUpperCase()) + (P.drinkNA ? L(', alkoholfritt alternativ', ', alcohol-free option') : '') + (P.drinkWeekday ? L(', även vardag', ', weekdays too') : '') + (drinkArr(P, 'drinkLike').length ? ', ' + P.drinkLike.map(tv).join('/').toLowerCase() : '') + (drinkArr(P, 'drinkRange').length ? ', ' + P.drinkRange.map(tv).join('/').toLowerCase() : '') + (drinkArr(P, 'drinkPack').length === 1 ? ', ' + tv(P.drinkPack[0]).toLowerCase() : '') + (P.drinkEco ? L(', ekologiskt', ', organic') : '');
     case 'bread': { const b = [...P.breadLeaven.map(tv), lab(BREAD_OPT.proof, P.breadProof), lab(BREAD_OPT.knead, P.breadKnead), lab(BREAD_OPT.hydration, P.breadHydration), ...P.breadFlour.map(tv), ...P.breadBake.map(tv)].filter(Boolean);
       return b.length ? b.join(', ') : L('Efter receptet', 'Follow the recipe'); }
@@ -2589,15 +2587,6 @@ function prefsSections() {
       <div class="row"><button class="btn" data-invopen>${P.pantryCatalog?.length ? L('Inventera skafferiet', 'Check the pantry') : L('Kom igång – bocka för det ni har', 'Get started – tick what you have')}</button></div>
       ${have.length ? `<h3 class="pantry-h">${L('Ni har', 'You have')} (${have.length})</h3><div class="chips compact">${shown.map(v => `<button type="button" class="chip rm" data-pantryrm="${esc(v)}" aria-label="${L(`Ta bort ${esc(v)}`, `Remove ${esc(v)}`)}">${esc(v)}</button>`).join('')}${have.length > MAX ? `<button type="button" class="chip more" data-pantrymore>${S.pantryAll ? L('Visa färre', 'Show fewer') : L(`+${have.length - MAX} till`, `+${have.length - MAX} more`)}</button>` : ''}</div>
         <p class="hint pantry-tip">${L('Tryck på en vara för att ta bort den.', 'Tap an item to remove it.')}</p>` : ''}`;
-    })()),
-    sec('refs', L('Förebilder', 'Inspiration'), (() => {
-      const block = (key, title, hint) => { const list = refList(P, key), known = REF_SITES.map(x => x[0]), custom = list.filter(x => !known.includes(x));
-        return `<div class="field"><label>${title}</label><span class="hint">${hint}</span>
-        <div class="chips compact">${known.map(n => `<button type="button" class="chip opt" data-reft="${key}|${esc(n)}" aria-pressed="${list.includes(n)}">${esc(n)}</button>`).join('')}${custom.map(n => `<button type="button" class="chip opt" data-reft="${key}|${esc(n)}" aria-pressed="true" title="${L('Tryck för att ta bort', 'Tap to remove')}">${esc(n)} ×</button>`).join('')}</div>
-        <div class="add-row"><input id="refNew-${key}" placeholder="${L('Egen, t.ex. Mob eller sajtens adress', 'Your own, e.g. Mob or the site address')}" aria-label="${title}"><button class="ghost" data-refadd="${key}">${L('Lägg till', 'Add')}</button></div></div>`; };
-      return `<p class="hint ss-lead">${L('Receptsajter ni litar på. Souschefen skriver recepten enligt deras metoder och nivå, och under Mer i receptet finns länkar för att jämföra med deras version.', 'Recipe sites you trust. The sous-chef writes recipes following their methods and level, and under More in the recipe there are links to compare with their version.')}</p>
-        ${block('refWeekday', L('Vardag', 'Weekdays'), L('Snabbt och smart – håller vardagens tidsram.', 'Quick and smart – keeps to the weekday time frame.'))}
-        ${block('refWeekend', L('Helg', 'Weekends'), L('Ambitiöst – teknik och maxad smak.', 'Ambitious – technique and maximum flavour.'))}`;
     })()),
     sec('drinks', L('Dryck', 'Drinks'), `
       <p class="hint ss-lead">${L('Souschefen föreslår vilken typ av dryck som passar till helgens recept, med länkar till Systembolagets sortiment.', 'The sous-chef suggests what kind of drink suits weekend recipes, with links to Systembolaget\'s range.')}</p>
@@ -2947,10 +2936,6 @@ $('#stage').addEventListener('click', async e => {
   if (pt) { const k = pt.dataset.ptoggle, v = pt.dataset.val, P = S.data.prefs; P[k] = P[k].includes(v) ? P[k].filter(x => x !== v) : [...P[k], v]; pt.setAttribute('aria-pressed', P[k].includes(v)); prefsChanged(); return; }
   const ps = t.closest('[data-pset]');
   if (ps) { S.data.prefs[ps.dataset.pset] = ps.dataset.val; ps.parentElement.querySelectorAll('[data-pset]').forEach(b => b.setAttribute('aria-pressed', b === ps)); prefsChanged(); return; }
-  const rft = t.closest('[data-reft]');
-  if (rft) { const [key, name] = rft.dataset.reft.split('|'); const P = S.data.prefs, l = refList(P, key); P[key] = l.includes(name) ? l.filter(x => x !== name) : [...l, name]; prefsChanged(); keepScroll(renderStage); return; }
-  const rfa = t.closest('[data-refadd]');
-  if (rfa) { const key = rfa.dataset.refadd, el = document.getElementById('refNew-' + key), v = (el?.value || '').trim(); if (v) { const P = S.data.prefs, l = refList(P, key); if (!l.some(x => fold(x) === fold(v))) P[key] = [...l, v]; prefsChanged(); keepScroll(renderStage); } return; }
   const pb = t.closest('[data-pbool]');
   if (pb) { const k = pb.dataset.pbool; S.data.prefs[k] = !S.data.prefs[k]; pb.setAttribute('aria-pressed', S.data.prefs[k]); prefsChanged(); return; }
   const pp = t.closest('[data-portions]');

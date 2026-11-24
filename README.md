@@ -13,7 +13,7 @@ Familjens souschef, kokbok och inköpslista som webbapp för dator, mobil och pl
 - **Kockens noter:** märkta Val, Teknik, Inköp, I förväg, Lättare eller Genväg. Val-noter visas vid ingredienserna, övriga vid rätt steg. "Byt till …" ändrar receptet direkt.
 - **Dryck på begäran:** sommelierresonemang (vad i rätten som styr, strategi, vad man ska undvika, servering) och länkar till Systembolaget filtrerade på stil, land, druva och er prisklass.
 - **Skafferiet:** en engångsinventering per grupp och favoritkök. Vardagsrecept bygger på skafferiet, helgrecept får kräva mer. Skafferivaror som handlas läggs till automatiskt.
-- **Förebilder:** receptsajter ni litar på, separat för vardag och helg. Styr receptens metod och nivå, med jämför-länkar under Mer.
+- **Jämför med förebilder:** under Mer finns länkar som söker efter rätten hos välkända receptsajter (vardag och helg).
 - **Fråga souschefen:** chatt bredvid receptet. Enkla frågor besvaras snabbt, ändringar uppdaterar receptet.
 - **Kokboken:** spara, betygsätt och skriv anteckningar. Souschefen läser kokboken och smakminnet.
 
