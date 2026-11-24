@@ -984,3 +984,4 @@ a.howto { text-decoration: none; color: var(--ink); }
 .cart-btn svg { width: 17px; height: 17px; }
 .cart-btn:hover { color: var(--pandan); border-color: var(--pandan); }
 .cart-btn.on { background: var(--pandan); border-color: var(--pandan); color: var(--pandan-ink); }
+.learned.shopped a { margin-left: 6px; font-weight: 700; }

@@ -316,6 +316,7 @@ const RECIPE_CORE_PROPS = {
   steps: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: S_STR, text: S_STR, uses: S_ARR, minutes: { type: 'INTEGER', nullable: true }, optional: { type: 'BOOLEAN' } }, required: ['title', 'text'], propertyOrdering: ['title', 'text', 'uses', 'minutes', 'optional'] } },
   health: { type: 'OBJECT', nullable: true, properties: { rating: { type: 'STRING', enum: ['bra', 'neutral', 'mindre bra'] }, why: S_STR }, required: ['rating'] },
 };
+const S_SHOP = { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S_STR, qty: S_STRN }, required: ['name'] } };
 // Huvudsvaret: chatt, förslag eller kärnreceptet (ingredienser och steg). Extradelarna hämtas efteråt (EXTRAS_SCHEMA).
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -328,12 +329,13 @@ const RESPONSE_SCHEMA = {
     recipe: { type: 'OBJECT', nullable: true, properties: RECIPE_CORE_PROPS, required: ['title', 'ingredients', 'steps'], propertyOrdering: Object.keys(RECIPE_CORE_PROPS) },
     learn: S_ARR,
     offerUpdate: { type: 'BOOLEAN' },
+    shop: S_SHOP,
   },
   required: ['reply'],
-  propertyOrdering: ['reply', 'suggestions', 'recipe', 'learn', 'offerUpdate'],
+  propertyOrdering: ['reply', 'suggestions', 'recipe', 'learn', 'offerUpdate', 'shop'],
 };
 // Enkla frågor om receptet som visas: bara text (ändringar går via knappen "Uppdatera receptet")
-const LIGHT_SCHEMA = { type: 'OBJECT', properties: { reply: S_STR, offerUpdate: { type: 'BOOLEAN' }, learn: S_ARR }, required: ['reply'], propertyOrdering: ['reply', 'offerUpdate', 'learn'] };
+const LIGHT_SCHEMA = { type: 'OBJECT', properties: { reply: S_STR, offerUpdate: { type: 'BOOLEAN' }, learn: S_ARR, shop: S_SHOP }, required: ['reply'], propertyOrdering: ['reply', 'offerUpdate', 'learn', 'shop'] };
 // Receptets extradelar, hämtas i bakgrunden när receptet redan visas
 const NOTE_KINDS = ['val', 'teknik', 'byte', 'inkop', 'forvag', 'lattare', 'genvag'];
 const EXTRAS_SCHEMA = {
@@ -377,6 +379,7 @@ Regler:
 - I varje steg: skriv ut mängderna i texten och lista ingrediensernas id i "uses". "minutes" anges för steg med vänte-/tillagningstid.
 - "countries": ISO 3166-1 alfa-2-koder (versaler) för rättens ursprungsland, t.ex. ["MY"], ["FR","SE"] för fusion. Regionalt kök → huvudlandet (Sydamerikanskt ceviche → ["PE"]).
 - "group" används för att dela upp ingredienser (t.ex. "Marinad", "Sås", "Servering"); annars null.
+- "shop": när vi ber dig lägga något på inköpslistan (t.ex. "lägg grädde och lime på listan", "skriv upp det som behövs till såsen", "lägg resten av receptet på inköpslistan"): varorna som [{"name": "grädde", "qty": "3 dl" | null}], namn som i en svensk butik och mängder för valda portioner. Svara kort i "reply" vad du lagt till. Annars [].
 - "learn": bara NYA saker vi själva sagt eller tydligt visat (t.ex. "Barnen tycker inte om koriander", "Vi gillade mer chili i panangen"). Inga gissningar. Annars [].
 - Använd smakminnet och kokboken nedan för att träffa vår smak. Föreslå gärna variationer på rätter vi gett högt betyg.
 - Svara på svenska. Om info saknas: ställ motfrågan i "reply" och sätt suggestions/recipe till null.`;
@@ -433,7 +436,8 @@ const LIGHT_RULES = `## APPENS SVARSFORMAT (måste följas)
 Det här är en snabb fråga under matlagningen (LÄGE 1). Svara ENDAST med ett JSON-objekt:
 { "reply": "svaret, max 3–5 meningar eller punkter, enkel markdown ok", "offerUpdate": false, "learn": [] }
 - "offerUpdate": true om svaret innebär att receptet borde ändras – appen visar då en knapp så vi kan uppdatera. Skicka aldrig receptet och skriv ALDRIG att receptet är ändrat.
-- "learn": bara NYA saker vi själva sagt eller tydligt visat om vår smak. Annars [].`;
+- "learn": bara NYA saker vi själva sagt eller tydligt visat om vår smak. Annars [].
+- "shop": när vi ber dig lägga något på inköpslistan (t.ex. "lägg grädde och lime på listan", "skriv upp det som behövs till såsen", "lägg resten av receptet på inköpslistan"): varorna som [{"name": "grädde", "qty": "3 dl" | null}], namn som i en svensk butik och mängder för valda portioner. Svara kort i "reply" vad du lagt till. Annars [].`;
 // Snabbare modeller för korta svar (chattfrågor, förslag); vanliga modellen som reserv
 const FAST_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 
@@ -1043,7 +1047,7 @@ function parseReply(raw) {
     const r = partialReply(t);
     o = { reply: r || (a >= 0 ? '' : t) };
   }
-  return { reply: cleanReply(o.reply), suggestions: o.suggestions ?? null, recipe: o.recipe ?? null, learn: Array.isArray(o.learn) ? o.learn : [], offerUpdate: !!o.offerUpdate };
+  return { reply: cleanReply(o.reply), suggestions: o.suggestions ?? null, recipe: o.recipe ?? null, learn: Array.isArray(o.learn) ? o.learn : [], offerUpdate: !!o.offerUpdate, shop: Array.isArray(o.shop) ? o.shop : [] };
 }
 function cleanReply(r) {
   if (r == null) return '';
@@ -1073,6 +1077,8 @@ function recipeDiff(a, b) {
 }
 const CLAIM_RE = /(i(?:'ve| have) (?:updated|changed|adjusted|replaced|added|removed)|has been (?:updated|changed|adjusted)|here is the (?:new|updated|revised)|uppdaterat|uppdaterade|uppdaterats|uppdaterar|ändrat|ändrade|ändrats|justerat|justerade|justerats|har bytt|bytt ut|bytts ut|lagt till|lagts till|tagit bort|tagits bort|här är (det|ditt|ert) (nya|ändrade|reviderade))/i;
 // Meddelanden som kan betyda att receptet ska ändras (eller att vi vill ha något nytt) går till det fulla formatet
+// Meddelanden om inköpslistan: snabbt svar med varorna i "shop" (receptet ändras inte)
+const SHOP_RE = /(inköpslist|handlingslist|på listan|till listan|shopping list|grocery list)/i;
 const CHANGE_RE = /(byt|ändra|gör om|göra om|lägg till|lägga till|ta bort|ersätt|uppdatera|skala|dubbla|halvera|portion|istället|i stället|annat recept|ny rätt|förslag|recept på|receptet på|vegetarisk version|swap|change|replace|update|add |remove|instead|servings|recipe for|suggest)|^\s*(ja|japp|kör|gör det|yes|ok|okej)\b/i;
 // Vid en ändring: flytta över extradelarna från förra versionen så att de syns tills nya hämtats
 function carryExtras(from, to) {
@@ -1288,7 +1294,7 @@ async function send(text, image, opts = {}) {
   try {
     // Enkla frågor om receptet som visas: kort instruktion och litet svarsformat (C) med snabb modell (D)
     const light = !flow && !image && !opts.display && !opts.enrich && S.route.view === 'recipe' && !!S.current.recipe
-      && !CHANGE_RE.test(text) && !/https?:\/\//.test(text);
+      && (!CHANGE_RE.test(text) || SHOP_RE.test(text)) && !/https?:\/\//.test(text);
     const kind = light ? 'chatt' : S.route.view === 'recipe' && !opts.newDish && !flow ? 'ändring' : opts.fast ? 'förslag' : 'recept';
     const raw = await callModel(showProgress, { light, fast: light || !!opts.fast, kind });
     const o = parseReply(raw);
@@ -1328,6 +1334,8 @@ async function send(text, image, opts = {}) {
       msg.hidden = true; userMsg.hidden = true;
       go('suggestions', { keepChat: true });
     }
+    const shopIt = (o.shop || []).map(x => ({ name: String(x?.name || '').trim(), qty: String(x?.qty || '').trim() })).filter(x => x.name);
+    if (shopIt.length) chatToShop(shopIt, msg);
     const learned = (Array.isArray(o.learn) ? o.learn : []).map(s => cleanReply(s)).filter(x => x.length > 3);
     if (S.lastCut && !recipe && !sugg && msg.text) { msg.text = msg.text.trimEnd() + '…'; msg.cut = true; }
     if (!recipe && !sugg && !msg.text) { msg.text = L('Souschefen gav inget svar på det. Försök formulera om frågan.', 'The sous-chef had no answer to that. Try rephrasing the question.'); msg.placeholder = true; }
@@ -1443,6 +1451,7 @@ function renderChat(scroll) {
         ? `<div class="offer">${m.notApplied ? `<span>${L('Receptet är inte ändrat än.', 'The recipe has not been changed yet.')}</span>` : ''}<button class="btn small" data-apply="${i}">${L('Uppdatera receptet', 'Update recipe')}</button><button class="ghost small" data-noapply="${i}">${L('Nej tack', 'No thanks')}</button></div>`
         : `<div class="offer weak"><button class="linkish" data-apply="${i}">${L('Uppdatera receptet utifrån svaret', 'Update the recipe from this answer')}</button></div>`;
       if (m.cut) extra += `<div class="offer weak"><span>${L('Svaret bröts av.', 'The answer was cut off.')}</span> <button class="linkish" data-retry="${i}">${L('Försök igen', 'Try again')}</button></div>`;
+      if (m.shopped?.length) extra += `<div class="learned shopped">🛒 ${L('På inköpslistan', 'On the shopping list')}: ${m.shopped.map(esc).join(' · ')} <a href="${SHOP_URL}" target="_blank" rel="noopener">${L('Öppna', 'Open')}</a></div>`;
       if (m.learned?.length) extra += `<div class="learned">${L('Souschefen kommer ihåg', 'The sous-chef will remember')}: ${m.learned.map(esc).join(' · ')}</div>`;
       return `<div class="msg assistant">${md(m.text) || ''}${extra}</div>`;
     }).join('');
@@ -2068,6 +2077,22 @@ async function toggleCart(id) {
     }
   } catch (e) { S.inCart[key] = had; toast(L('Kunde inte uppdatera inköpslistan: ', 'Could not update the shopping list: ') + (e.message || e)); }
   keepScroll(renderStage);
+}
+// Varor som souschefen lagt på inköpslistan från chatten
+async function chatToShop(items, msg) {
+  if (!window.Cloud?.active() || !Cloud.state.fid) { msg.text = (msg.text || '') + '\n\n' + L('*(Inköpslistan kräver familjekontot – Inställningar → Konto och familj.)*', '*(The shopping list needs the family account – Settings → Account and family.)*'); saveChat(); renderChat(true); return; }
+  try {
+    const listId = await groceryListId(), col = famCol('items'), open = {}, src = S.current.recipe?.title || '';
+    (await col.where('listId', '==', listId).get()).forEach(d => { const v = d.data(); if (!v.done) open[fold(v.text)] = { ref: d.ref, ...v }; });
+    const batch = Cloud.state.db.batch(), t0 = Date.now(), who = Cloud.state.user?.displayName || Cloud.state.user?.email || '';
+    items.forEach((x, k) => { const ex = open[fold(x.name)];
+      if (ex) batch.update(ex.ref, { ...window.shopMerge(ex, src, x.qty), updatedAt: t0 });
+      else batch.set(col.doc(), { listId, text: x.name, ...window.shopNew(src, x.qty), done: false, addedAt: t0 + k, addedBy: who }); });
+    await batch.commit();
+    msg.shopped = items.map(x => x.qty ? `${x.name} (${x.qty})` : x.name);
+    if (S.current.recipe) { S.inCart = S.inCart || {}; S.current.recipe.ingredients.forEach(i => { if (items.some(x => fold(x.name) === fold(i.name))) S.inCart[cartKey(S.current.recipe, i)] = { merged: true }; }); if (S.route.view === 'recipe') keepScroll(renderStage); }
+    saveChat(); renderChat(true);
+  } catch (e) { toast(L('Kunde inte lägga till på inköpslistan: ', 'Could not add to the shopping list: ') + (e.message || e)); }
 }
 async function addToShop() {
   const sh = S.shop, r = S.current.recipe; if (!sh?.lists || sh.busy || !r) return;
