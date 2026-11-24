@@ -1647,7 +1647,7 @@ function viewRecipe() {
         <input type="checkbox" ${S.checked[i.id] ? 'checked' : ''} data-check="${esc(i.id)}">
         <span class="amt">${esc(scaleAmount(i.amount, f))}</span>
         <span><span class="name">${esc(i.name)}</span>${i.note ? ` <span class="note">${esc(i.note)}</span>` : ''}</span>
-        ${(() => { const b = noteRefs(r, { ing: i.id }) + (i.swaps?.length ? `<button type="button" class="swap-btn" data-swapopen="${esc(i.id)}" aria-expanded="${S.openSwap === i.id}">${L('Byt', 'Swap')}</button>` : ''); return b ? `<span class="ing-btns">${b}</span>` : ''; })()}
+        ${(() => { const b = noteRefs(r, { ing: i.id }) + `<button type="button" class="cart-btn${S.inCart?.[cartKey(r, i)] ? ' on' : ''}" data-cart="${esc(i.id)}" aria-pressed="${!!S.inCart?.[cartKey(r, i)]}" aria-label="${S.inCart?.[cartKey(r, i)] ? L(`Ta bort ${esc(i.name)} från inköpslistan`, `Remove ${esc(i.name)} from the shopping list`) : L(`Lägg ${esc(i.name)} på inköpslistan`, `Add ${esc(i.name)} to the shopping list`)}" title="${L('Inköpslistan', 'Shopping list')}">${S.inCart?.[cartKey(r, i)] ? '✓' : CART_ICON}</button>` + (i.swaps?.length ? `<button type="button" class="swap-btn" data-swapopen="${esc(i.id)}" aria-expanded="${S.openSwap === i.id}">${L('Byt', 'Swap')}</button>` : ''); return b ? `<span class="ing-btns">${b}</span>` : ''; })()}
       </label>${noteInline(r, { ing: i.id })}${i.swaps?.length && S.openSwap === i.id ? swapPanel(i, f) : ''}`).join('')}</div>`).join('')}
     <div class="ing-actions"><button class="btn start-cook" data-startcook>${L('Allt är framme – börja laga', 'Everything is out – start cooking')}</button>
       <button class="ghost shop-open" data-shopopen>🛒 ${L('Till inköpslistan', 'To shopping list')}</button></div>
@@ -2040,6 +2040,34 @@ function shopSheet(r, f) {
     <div class="sheet-foot"><button class="btn" data-shopadd ${!sh.lists || !n || sh.busy ? 'disabled' : ''}>${sh.busy ? L('Lägger till…', 'Adding…') : L(`Lägg till ${n} ${n === 1 ? 'vara' : 'varor'}`, `Add ${n} ${n === 1 ? 'item' : 'items'}`)}</button>
       <a class="ghost" href="${SHOP_URL}" target="_blank" rel="noopener">${L('Öppna inköpslistan', 'Open shopping list')}</a></div>
   </div>`;
+}
+// En enskild ingrediens till/från mataffärslistan (varukorgsikonen på ingrediensraden)
+const CART_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14l-1.4 9.1a2 2 0 0 1-2 1.7H8.4a2 2 0 0 1-2-1.7L5 9Zm3 0 2-5m6 5-2-5M3.5 9h17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const cartKey = (r, i) => fold(r.title) + '|' + fold(i.name);
+async function groceryListId() {
+  const lists = (await famCol('lists').get()).docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const pref = lists.find(l => l.id === LS.get('fk.shopList', '') && isGroceryList(l)) || lists.find(isGroceryList);
+  if (pref) return pref.id;
+  const ref = famCol('lists').doc(); await ref.set({ name: L('Mat', 'Groceries'), kind: 'grocery', order: lists.length, createdAt: Date.now() }); return ref.id;
+}
+async function toggleCart(id) {
+  const r = S.current.recipe, i = r?.ingredients.find(x => x.id === id); if (!i) return;
+  if (!window.Cloud?.active() || !Cloud.state.fid) { toast(L('Inköpslistan kräver familjekontot (Inställningar → Konto och familj).', 'The shopping list needs the family account (Settings → Account and family).')); return; }
+  S.inCart = S.inCart || {};
+  const key = cartKey(r, i), had = S.inCart[key];
+  S.inCart[key] = had ? null : { pending: true }; keepScroll(renderStage);
+  try {
+    if (had?.ref) { await had.ref.delete(); S.inCart[key] = null; toast(L(`${i.name} borttagen från inköpslistan`, `${i.name} removed from the shopping list`), 2500); }
+    else {
+      const listId = await groceryListId(), x = shopRows(r, portionsFor(r) / (r.servings || 4)).find(y => y.id === id);
+      const col = famCol('items'); let ex = null;
+      (await col.where('listId', '==', listId).get()).forEach(d => { const v = d.data(); if (!v.done && fold(v.text) === fold(x.name)) ex = { ref: d.ref, ...v }; });
+      if (ex) { await ex.ref.update({ ...window.shopMerge(ex, r.title, x.qty), updatedAt: Date.now() }); S.inCart[key] = { merged: true }; }
+      else { const ref = col.doc(); await ref.set({ listId, text: x.name, ...window.shopNew(r.title, x.qty), done: false, addedAt: Date.now(), addedBy: Cloud.state.user?.displayName || Cloud.state.user?.email || '', ...(x.stock && !isGiven(x.name) ? { stock: true } : {}) }); S.inCart[key] = { ref }; }
+      toast(L(`${i.name} på inköpslistan`, `${i.name} on the shopping list`), 2500);
+    }
+  } catch (e) { S.inCart[key] = had; toast(L('Kunde inte uppdatera inköpslistan: ', 'Could not update the shopping list: ') + (e.message || e)); }
+  keepScroll(renderStage);
 }
 async function addToShop() {
   const sh = S.shop, r = S.current.recipe; if (!sh?.lists || sh.busy || !r) return;
@@ -2703,6 +2731,7 @@ $('#stage').addEventListener('click', async e => {
   if (t.closest('[data-more]')) { send(L('Ge mig fler förslag, gärna åt ett annat håll.', 'Give me more suggestions, ideally in a different direction.'), null, { flow: true, fast: true }); return; }
 
   // Recept: kockens noter, byten, valfria steg, tillbehör, komplettering
+  const cb = t.closest('[data-cart]'); if (cb) { e.preventDefault(); e.stopPropagation(); toggleCart(cb.dataset.cart); return; }
   const nr = t.closest('[data-noteref]');
   if (nr) { e.preventDefault(); e.stopPropagation(); const key = nr.dataset.noteref + '|' + nr.dataset.where; S.openNote = S.openNote === key ? null : key; keepScroll(renderStage); return; }
   const nsw = t.closest('[data-noteswitch]');

@@ -978,3 +978,9 @@ a.howto { text-decoration: none; color: var(--ink); }
 .inapp-box p { margin: 0; }
 .inapp-box .btn, .inapp-box .ghost { justify-self: start; text-decoration: none; }
 .inapp-box a.btn, .inapp-box a.btn:visited { color: var(--pandan-ink, #fff); background: var(--pandan, #2e6b4f); }
+
+/* Varukorgsikon på ingrediensraden */
+.cart-btn { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; font-weight: 700; }
+.cart-btn svg { width: 17px; height: 17px; }
+.cart-btn:hover { color: var(--pandan); border-color: var(--pandan); }
+.cart-btn.on { background: var(--pandan); border-color: var(--pandan); color: var(--pandan-ink); }
