@@ -1368,6 +1368,7 @@ async function send(text, image, opts = {}) {
       S.provisional = null;
     }
     S.busy = false; S.partialSugg = null; S.partialRecipe = null; saveChat(); renderChat(true);
+    if (Talk.on()) { const last = S.chat[S.chat.length - 1]; Talk.reply(last && last.role !== 'user' ? last.text + (last.shopped?.length ? '. ' + L('Lagt på inköpslistan: ', 'Added to the shopping list: ') + last.shopped.join(', ') : '') : ''); }
     if (S.route.view === 'home' || S.route.view === 'suggestions') renderStage();
     if (S.updating) { S.updating = null; if (S.route.view === 'recipe') keepScroll(renderStage); }
     if (!flow && !document.querySelector('.app[data-chat="open"]')) $('#chatDot').hidden = false;
@@ -1411,41 +1412,70 @@ $('#composer').addEventListener('submit', e => {
   ta.value = ''; autoGrow(ta);
   send(v, img);
 });
-/* ---------- Prata i chatten: webbläsarens taligenkänning, skickas när man slutat prata ---------- */
-(() => {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#chatMic');
-  if (!SR || !mic) return;
-  mic.hidden = false;
-  let cur = null;
+/* ---------- Prata i chatten och samtalsläge ----------
+   Mikrofonen: säg en fråga, den skickas när man slutat prata.
+   Samtal (hörlurarna): souschefen läser upp svaret och lyssnar sedan igen, tills man trycker igen eller är tyst. */
+const Talk = (() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#chatMic'), talkBtn = $('#chatTalk');
+  if (!SR || !mic) return { on: () => false, reply() {} };
+  mic.hidden = false; if (talkBtn && 'speechSynthesis' in window) talkBtn.hidden = false;
+  let cur = null, talking = false;
+  const inp = $('#chatInput'), ph0 = inp.placeholder;
   const stop = send => { if (!cur) return; cur.send = send; try { cur.rec.stop(); } catch { cur.end(); } };
-  mic.addEventListener('click', () => {
-    if (cur) { stop(true); return; }
-    const inp = $('#chatInput'), before = inp.value.trim(), ph = inp.placeholder;
-    const rec = new SR(); let final = '', quiet;
-    cur = { rec, send: true };
+  const ui = () => {
+    mic.classList.toggle('on', !!cur && !talking); mic.setAttribute('aria-pressed', String(!!cur && !talking));
+    talkBtn?.classList.toggle('on', talking); talkBtn?.setAttribute('aria-pressed', String(talking));
+    inp.placeholder = cur ? L('Lyssnar… prata nu', 'Listening… speak now') : talking ? L('Souschefen svarar…', 'The sous-chef is answering…') : ph0;
+  };
+  function listen() {
+    if (cur) return;
+    const before = inp.value.trim(), rec = new SR(); let heard = false, quiet;
+    const st = cur = { rec, send: true };
     rec.lang = S.settings.lang === 'en' ? 'en-GB' : 'sv-SE'; rec.interimResults = true; rec.continuous = true;
-    const st = cur;
     st.end = () => {
       if (cur !== st) return; cur = null; clearTimeout(quiet);
-      mic.classList.remove('on'); mic.setAttribute('aria-pressed', 'false'); inp.placeholder = ph;
       const text = inp.value.trim();
-      if (st.send && text && text !== before) $('#composer').requestSubmit();
+      if (st.send && heard && text && text !== before) $('#composer').requestSubmit();
+      else if (talking && !heard) { talking = false; toast(L('Samtalet avslutat.', 'Conversation ended.'), 2000); }
+      ui();
     };
     rec.onresult = ev => {
-      let interim = ''; final = '';
-      for (let k = 0; k < ev.results.length; k++) { const t = ev.results[k][0].transcript; if (ev.results[k].isFinal) final += t + ' '; else interim += t; }
-      inp.value = [before, (final + interim).replace(/\s+/g, ' ').trim()].filter(Boolean).join(' '); autoGrow(inp);
+      let txt = '';
+      for (let k = 0; k < ev.results.length; k++) txt += ev.results[k][0].transcript + (ev.results[k].isFinal ? ' ' : '');
+      heard = true; inp.value = [before, txt.replace(/\s+/g, ' ').trim()].filter(Boolean).join(' '); autoGrow(inp);
       clearTimeout(quiet); quiet = setTimeout(() => stop(true), 1800);   // tyst en stund = klart, skicka
     };
     rec.onerror = ev => {
-      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast(L('Mikrofonen är blockerad – tillåt den i webbläsarens inställningar.', 'The microphone is blocked – allow it in the browser settings.'), 4000);
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { talking = false; toast(L('Mikrofonen är blockerad – tillåt den i webbläsarens inställningar.', 'The microphone is blocked – allow it in the browser settings.'), 4000); }
       else if (!['no-speech', 'aborted'].includes(ev.error)) toast(L('Kunde inte höra – försök igen.', 'Could not hear – try again.'), 2500);
     };
     rec.onend = () => st.end();
     try { rec.start(); } catch { cur = null; return; }
-    quiet = setTimeout(() => stop(true), 8000);   // inget sagt alls
-    mic.classList.add('on'); mic.setAttribute('aria-pressed', 'true'); inp.placeholder = L('Lyssnar… prata nu', 'Listening… speak now');
+    quiet = setTimeout(() => stop(true), talking ? 10000 : 8000);   // inget sagt alls
+    ui();
+  }
+  // Läs upp svaret med enhetens röst (snabbt), sedan lyssna igen
+  function reply(text) {
+    if (!talking) return;
+    const plain = String(text || '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_#>`|]/g, '').replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim();
+    if (!plain) { listen(); return; }
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(plain), v = pickVoice();
+      if (v) u.voice = v; u.lang = v?.lang || (S.settings.lang === 'en' ? 'en-GB' : 'sv-SE'); u.rate = 1.05;
+      u.onend = () => { if (talking) setTimeout(listen, 250); };
+      u.onerror = () => { if (talking) listen(); };
+      speechSynthesis.speak(u); ui();
+    } catch { listen(); }
+  }
+  mic.addEventListener('click', () => { if (cur) stop(true); else { talking = false; listen(); } });
+  talkBtn?.addEventListener('click', () => {
+    if (talking) { talking = false; try { speechSynthesis.cancel(); } catch { } stop(false); ui(); return; }
+    talking = true;
+    try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch { }   // låser upp uppläsning i Safari
+    stop(false); listen();
   });
+  return { on: () => talking, reply };
 })();
 $('#chatInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && window.matchMedia('(pointer: fine)').matches) { e.preventDefault(); $('#composer').requestSubmit(); }

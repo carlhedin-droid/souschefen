@@ -990,3 +990,5 @@ a.howto { text-decoration: none; color: var(--ink); }
 .composer .mic.on { background: var(--sambal, #c9553b); color: #fff; animation: micpulse 1.2s ease-in-out infinite; }
 @keyframes micpulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--sambal, #c9553b) 25%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .composer .mic.on { animation: none; } }
+
+.composer .talk.on { background: var(--pandan); color: var(--pandan-ink); animation: micpulse 1.6s ease-in-out infinite; }

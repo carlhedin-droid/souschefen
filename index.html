@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=81">
+<link rel="stylesheet" href="styles.css?v=82">
 </head>
 <body>
 <div class="app" id="app" data-chat="closed">
@@ -56,6 +56,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </label>
         <textarea id="chatInput" rows="1" placeholder="Fråga souschefen…" aria-label="Meddelande till kocken"></textarea>
+        <button class="icon-btn talk" type="button" id="chatTalk" hidden aria-label="Samtal med souschefen" title="Samtal – souschefen svarar med röst">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1M4 13h2.5v6H5a1 1 0 0 1-1-1zm16 0h-2.5v6H19a1 1 0 0 0 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
         <button class="icon-btn mic" type="button" id="chatMic" hidden aria-label="Prata med souschefen" title="Prata">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
@@ -76,6 +79,6 @@
 <script src="firebase-config.js?v=49"></script>
 <script src="cloud.js?v=55"></script>
 <script src="qty.js?v=2"></script>
-<script src="app.js?v=88"></script>
+<script src="app.js?v=89"></script>
 </body>
 </html>
