@@ -1411,6 +1411,42 @@ $('#composer').addEventListener('submit', e => {
   ta.value = ''; autoGrow(ta);
   send(v, img);
 });
+/* ---------- Prata i chatten: webbläsarens taligenkänning, skickas när man slutat prata ---------- */
+(() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition, mic = $('#chatMic');
+  if (!SR || !mic) return;
+  mic.hidden = false;
+  let cur = null;
+  const stop = send => { if (!cur) return; cur.send = send; try { cur.rec.stop(); } catch { cur.end(); } };
+  mic.addEventListener('click', () => {
+    if (cur) { stop(true); return; }
+    const inp = $('#chatInput'), before = inp.value.trim(), ph = inp.placeholder;
+    const rec = new SR(); let final = '', quiet;
+    cur = { rec, send: true };
+    rec.lang = S.settings.lang === 'en' ? 'en-GB' : 'sv-SE'; rec.interimResults = true; rec.continuous = true;
+    const st = cur;
+    st.end = () => {
+      if (cur !== st) return; cur = null; clearTimeout(quiet);
+      mic.classList.remove('on'); mic.setAttribute('aria-pressed', 'false'); inp.placeholder = ph;
+      const text = inp.value.trim();
+      if (st.send && text && text !== before) $('#composer').requestSubmit();
+    };
+    rec.onresult = ev => {
+      let interim = ''; final = '';
+      for (let k = 0; k < ev.results.length; k++) { const t = ev.results[k][0].transcript; if (ev.results[k].isFinal) final += t + ' '; else interim += t; }
+      inp.value = [before, (final + interim).replace(/\s+/g, ' ').trim()].filter(Boolean).join(' '); autoGrow(inp);
+      clearTimeout(quiet); quiet = setTimeout(() => stop(true), 1800);   // tyst en stund = klart, skicka
+    };
+    rec.onerror = ev => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast(L('Mikrofonen är blockerad – tillåt den i webbläsarens inställningar.', 'The microphone is blocked – allow it in the browser settings.'), 4000);
+      else if (!['no-speech', 'aborted'].includes(ev.error)) toast(L('Kunde inte höra – försök igen.', 'Could not hear – try again.'), 2500);
+    };
+    rec.onend = () => st.end();
+    try { rec.start(); } catch { cur = null; return; }
+    quiet = setTimeout(() => stop(true), 8000);   // inget sagt alls
+    mic.classList.add('on'); mic.setAttribute('aria-pressed', 'true'); inp.placeholder = L('Lyssnar… prata nu', 'Listening… speak now');
+  });
+})();
 $('#chatInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && window.matchMedia('(pointer: fine)').matches) { e.preventDefault(); $('#composer').requestSubmit(); }
 });

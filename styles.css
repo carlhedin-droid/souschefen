@@ -985,3 +985,8 @@ a.howto { text-decoration: none; color: var(--ink); }
 .cart-btn:hover { color: var(--pandan); border-color: var(--pandan); }
 .cart-btn.on { background: var(--pandan); border-color: var(--pandan); color: var(--pandan-ink); }
 .learned.shopped a { margin-left: 6px; font-weight: 700; }
+
+/* Mikrofon i chatten */
+.composer .mic.on { background: var(--sambal, #c9553b); color: #fff; animation: micpulse 1.2s ease-in-out infinite; }
+@keyframes micpulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--sambal, #c9553b) 25%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .composer .mic.on { animation: none; } }
