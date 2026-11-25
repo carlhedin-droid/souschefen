@@ -1101,6 +1101,9 @@ ${prefsText(d)}
 ## OM FAMILJEN (fritext)
 ${S.data.profile}
 
+## SMAKMINNE (det du lärt dig om oss – gäller även noterna)
+${S.data.memory.filter(m => !m.deleted).map(m => `- ${m.text}`).join('\n') || '- (inget ännu)'}
+
 ## IDAG
 ${d.name}, ${d.label}, säsong ${season()}.${L('', '\n\nLANGUAGE: Write everything the user sees in natural English (keep kind, taste, food, grape, country and region values and note "kind" exactly as specified).')}`;
   const prompt = `Recept (${portionsFor(r)} portioner):\n${JSON.stringify(core)}`;
